@@ -102,7 +102,7 @@
           <details class="accordion import-adjust" id="importAdjust" hidden>
             <summary id="importSummary">取り込み設定を調整</summary>
             <div class="accordion-body">
-              <p class="import-adjust-hint">プレビューの行番号をクリックするとヘッダー行・データ開始行を指定できます。数値での直接入力も可能です。</p>
+              <p class="import-adjust-hint">前置きの注記行や複数箇所の除外など複雑な形式は、メイン画面の「生データ」タブでセルをドラッグ選択して調整できます。</p>
               <div class="import-row-fields">
                 <div class="field">
                   <label for="importHeaderRow">ヘッダー行<small>（0=ヘッダーなし）</small></label>
@@ -112,10 +112,10 @@
                   <label for="importDataStartRow">データ開始行</label>
                   <input type="number" id="importDataStartRow" min="1" step="1" inputmode="numeric">
                 </div>
-                <button type="button" class="btn ghost sm" id="importAutoBtn">自動検出に戻す</button>
               </div>
-              <div class="import-preview-scroll" tabindex="0">
-                <table id="importPreviewTable" class="import-preview-table"></table>
+              <div class="import-row-fields">
+                <button type="button" class="btn ghost sm" id="importAutoBtn">自動検出に戻す</button>
+                <button type="button" class="btn sm" id="openMatrixBtn">生データを表示して調整 →</button>
               </div>
             </div>
           </details>
@@ -343,6 +343,7 @@
             <button type="button" class="tab active" role="tab" aria-selected="true" data-view="chart">グラフ</button>
             <button type="button" class="tab" role="tab" aria-selected="false" data-view="table">テーブル</button>
             <button type="button" class="tab" role="tab" aria-selected="false" data-view="stats">統計</button>
+            <button type="button" class="tab" role="tab" aria-selected="false" data-view="matrix" id="matrixTab" hidden>生データ</button>
           </div>
           <div class="toolbar-actions">
             <button type="button" class="btn ghost sm" id="downloadPngBtn">
@@ -419,6 +420,35 @@
             <p class="chart-meta" id="statsNote"></p>
           </div>
           <div id="statsContent"></div>
+        </section>
+
+        <!-- 生データマトリクス（複雑な形式の取り込み調整） -->
+        <section class="card matrix-card" id="matrixCard" hidden aria-label="生データマトリクス">
+          <div class="card-head">
+            <h3>生データマトリクス</h3>
+            <p class="chart-meta" id="matrixNote">セルをドラッグして範囲を選択し、下のボタンで役割を割り当てます</p>
+          </div>
+          <div class="matrix-legend">
+            <span><i class="legend-swatch legend-header" aria-hidden="true"></i>ヘッダー行</span>
+            <span><i class="legend-swatch legend-excluded" aria-hidden="true"></i>除外</span>
+            <span><i class="legend-swatch legend-x" aria-hidden="true"></i>X軸</span>
+            <span><i class="legend-swatch legend-series" aria-hidden="true"></i>系列（Y軸）</span>
+          </div>
+          <div class="matrix-toolbar" id="matrixToolbar">
+            <span class="matrix-selection-label" id="matrixSelectionLabel">セルをドラッグ、または列見出しをクリックして範囲を選択してください</span>
+            <div class="matrix-toolbar-actions">
+              <button type="button" class="btn ghost sm" id="matrixSetHeaderBtn" disabled>ヘッダー行に設定</button>
+              <button type="button" class="btn ghost sm" id="matrixSetDataStartBtn" disabled>データ開始行に設定</button>
+              <button type="button" class="btn ghost sm" id="matrixExcludeBtn" disabled>この範囲を除外</button>
+              <button type="button" class="btn ghost sm" id="matrixIncludeBtn" disabled>除外を解除</button>
+              <span class="matrix-toolbar-sep" aria-hidden="true"></span>
+              <button type="button" class="btn ghost sm" id="matrixSetXBtn" disabled>X軸に設定</button>
+              <button type="button" class="btn ghost sm" id="matrixAddSeriesBtn" disabled>系列(Y軸)に追加</button>
+            </div>
+          </div>
+          <div class="matrix-scroll" tabindex="0">
+            <table id="matrixTable" class="import-preview-table matrix-table"></table>
+          </div>
         </section>
       </main>
     </div>

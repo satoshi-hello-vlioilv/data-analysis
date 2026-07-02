@@ -225,15 +225,21 @@ const DataLayer = (() => {
    * AOA + ヘッダー行/データ開始行 → { rows, columns, meta }
    * headerRowIndex: -1 = ヘッダーなし（列名は「列1」「列2」…を自動生成）
    * dataStartRowIndex: この行（0始まり）からをデータ本体として扱う
+   * excludedRows: データ開始行以降にあっても除外したい行番号（0始まり）の Set。
+   *   注記・小計行などがデータの途中や末尾に混在する複雑な形式に対応するため。
    */
-  function buildTable(aoa, headerRowIndex, dataStartRowIndex, sourceName) {
+  function buildTable(aoa, headerRowIndex, dataStartRowIndex, sourceName, excludedRows) {
+    excludedRows = excludedRows || new Set();
     const hasHeader = headerRowIndex !== null && headerRowIndex !== undefined && headerRowIndex >= 0 && headerRowIndex < aoa.length;
     const startIndex = Math.max(0, Math.min(dataStartRowIndex, aoa.length));
     const headerRow = hasHeader ? aoa[headerRowIndex] : null;
 
     const bodyRows = aoa
       .slice(startIndex)
-      .filter((row, i) => startIndex + i !== headerRowIndex) // ヘッダー行がデータ開始行以降に来ても二重計上しない
+      .filter((row, i) => {
+        const idx = startIndex + i;
+        return idx !== headerRowIndex && !excludedRows.has(idx); // ヘッダー行・手動除外行は二重計上しない
+      })
       .filter(row => Array.isArray(row) && row.some(c => !isEmptyCell(c)));
 
     const width = Math.max(
@@ -300,7 +306,8 @@ const DataLayer = (() => {
         hasHeader,
         headerRowIndex: hasHeader ? headerRowIndex : -1,
         dataStartRowIndex: startIndex,
-        totalRawRows: aoa.length
+        totalRawRows: aoa.length,
+        excludedRowCount: excludedRows.size
       }
     };
   }

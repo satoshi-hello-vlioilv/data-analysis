@@ -526,6 +526,98 @@ button { font-family: inherit; }
   vertical-align: middle;
 }
 
+.import-row-exclude-badge { background: var(--muted); }
+
+/* ==========================================================================
+   生データマトリクス（複雑な形式の取り込み調整 — メイン画面）
+   .import-preview-table をベースに、セル範囲のドラッグ選択と役割の割り当てを追加
+   ========================================================================== */
+
+.matrix-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  padding: 10px 18px 0;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.matrix-legend span { display: inline-flex; align-items: center; gap: 5px; }
+
+.legend-swatch { width: 10px; height: 10px; border-radius: 3px; flex-shrink: 0; }
+.legend-header { background: var(--accent-wash); border: 1px solid var(--accent); }
+.legend-excluded { background: var(--muted); opacity: 0.5; }
+.legend-x { background: var(--accent); }
+.legend-series { background: var(--series-legend-color, var(--status-good)); }
+
+.matrix-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 10px 18px 0;
+  padding: 8px 12px;
+  background: var(--accent-wash);
+  border-radius: var(--radius-md);
+}
+
+.matrix-selection-label {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--accent-strong);
+  white-space: nowrap;
+}
+
+.matrix-toolbar-actions { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.matrix-toolbar-sep { width: 1px; height: 18px; background: var(--border); flex-shrink: 0; }
+
+.matrix-scroll {
+  max-height: 60vh;
+  overflow: auto;
+  margin: 12px 18px 18px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+
+.matrix-table { font-size: 12px; user-select: none; }
+
+.matrix-table td[data-row] { cursor: cell; }
+
+.matrix-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 10.5px;
+  font-weight: 700;
+  text-align: center;
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--axis);
+  cursor: default;
+}
+
+.matrix-table thead th[data-col] { cursor: pointer; }
+.matrix-table thead th[data-col]:hover { color: var(--accent); background: var(--accent-wash); }
+
+.matrix-table thead th.matrix-corner { position: sticky; left: 0; background: var(--surface); z-index: 3; }
+
+.matrix-table thead th.col-role-x,
+.matrix-table thead th.col-role-series { color: var(--text-primary); font-weight: 700; }
+
+.matrix-table td.cell-selected {
+  background: var(--accent-wash);
+  outline: 1.5px solid var(--accent);
+  outline-offset: -1.5px;
+}
+
+.matrix-table tr.row-excluded-manual { opacity: 0.45; }
+
+/* 列数が多いファイルでも行番号・操作ボタンが常に見えるよう、横スクロール時も左端に固定 */
+.matrix-table .import-row-gutter { position: sticky; left: 0; z-index: 1; background: var(--surface); }
+.matrix-table tr.row-header .import-row-gutter { background: var(--accent-wash); }
+
 /* ==========================================================================
    フォームコントロール
    ========================================================================== */
@@ -1346,5 +1438,11 @@ body.dnd-column-active .drop-zone.drop-reject {
     flex: 1;
     min-height: 0;
     overflow-y: auto;
+  }
+
+  .matrix-card .matrix-scroll {
+    flex: 1;
+    min-height: 0;
+    max-height: none;
   }
 }

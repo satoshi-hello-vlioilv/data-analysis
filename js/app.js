@@ -56,7 +56,8 @@
     importRaw: null,          // { aoa, sourceName } | null（サンプルデータ利用時は null）
     importSuggested: null,    // { headerRowIndex, dataStartRowIndex } 自動検出値
     importHeaderRow: -1,
-    importDataStart: 0
+    importDataStart: 0,
+    importExcludedRows: new Set() // データ開始行以降でも除外したい行番号（注記・小計行など）
   };
 
   let uidCounter = 0;
@@ -83,7 +84,21 @@
     importHeaderRow: $('importHeaderRow'),
     importDataStartRow: $('importDataStartRow'),
     importAutoBtn: $('importAutoBtn'),
-    importPreviewTable: $('importPreviewTable'),
+    openMatrixBtn: $('openMatrixBtn'),
+
+    // 生データマトリクス（メイン画面・複雑な形式の取り込み調整）
+    matrixTab: $('matrixTab'),
+    matrixCard: $('matrixCard'),
+    matrixNote: $('matrixNote'),
+    matrixToolbar: $('matrixToolbar'),
+    matrixSelectionLabel: $('matrixSelectionLabel'),
+    matrixSetHeaderBtn: $('matrixSetHeaderBtn'),
+    matrixSetDataStartBtn: $('matrixSetDataStartBtn'),
+    matrixExcludeBtn: $('matrixExcludeBtn'),
+    matrixIncludeBtn: $('matrixIncludeBtn'),
+    matrixSetXBtn: $('matrixSetXBtn'),
+    matrixAddSeriesBtn: $('matrixAddSeriesBtn'),
+    matrixTable: $('matrixTable'),
 
     // ステッパー（ステップ切替タブ）
     stepTabData: $('stepTabData'),
@@ -233,6 +248,7 @@
   function applyTheme(theme) {
     state.theme = theme;
     document.documentElement.dataset.theme = theme;
+    document.documentElement.style.setProperty('--series-legend-color', Palette.seriesColor(theme, 0));
     try { localStorage.setItem('gcs-theme', theme); } catch (e) { /* プライベートモード等 */ }
     renderSeriesList();
     renderHistSeriesList();
@@ -245,6 +261,7 @@
     const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
     state.theme = saved || (prefersDark ? 'dark' : 'light');
     document.documentElement.dataset.theme = state.theme;
+    document.documentElement.style.setProperty('--series-legend-color', Palette.seriesColor(state.theme, 0));
   }
 
   // ---------------------------------------------------------------
@@ -268,6 +285,7 @@
           // サンプルデータは既に整形済みのため、取り込み設定（生プレビュー）は不要
           state.importRaw = null;
           state.importSuggested = null;
+          state.importExcludedRows = new Set();
           loadTable(sample.build());
           switchStep('chart'); // 読み込み直後は完成したグラフをすぐ見せる
           showToast('success', 'サンプル「' + sample.name + '」を読み込みました');
@@ -284,6 +302,7 @@
         const suggested = DataLayer.suggestStructure(aoa);
         state.importRaw = { aoa, sourceName };
         state.importSuggested = suggested;
+        state.importExcludedRows = new Set();
         commitImport(suggested.headerRowIndex, suggested.dataStartRowIndex, { initial: true });
       })
       .catch(err => {
@@ -292,22 +311,24 @@
   }
 
   /**
-   * 取り込み設定（ヘッダー行・データ開始行）を確定し、テーブルを再構築する。
-   * ファイル選択直後の初回確定にも、プレビューでの手動調整にも使う。
+   * 取り込み設定（ヘッダー行・データ開始行・除外行）を確定し、テーブルを再構築する。
+   * ファイル選択直後の初回確定にも、プレビュー／マトリクスでの手動調整にも使う。
    */
   function commitImport(headerRowIndex, dataStartRowIndex, opts) {
     if (!state.importRaw) return;
     opts = opts || {};
     let table;
     try {
-      table = DataLayer.buildTable(state.importRaw.aoa, headerRowIndex, dataStartRowIndex, state.importRaw.sourceName);
+      table = DataLayer.buildTable(state.importRaw.aoa, headerRowIndex, dataStartRowIndex, state.importRaw.sourceName, state.importExcludedRows);
     } catch (err) {
       showToast('error', err.message || 'この設定では取り込めません');
       return;
     }
     state.importHeaderRow = headerRowIndex;
     state.importDataStart = dataStartRowIndex;
-    loadTable(table);
+    // 初回読込は完成したグラフをすぐ見せるが、生データマトリクス等での再調整時は
+    // 表示中のタブ（生データ・テーブルなど）から強制的に切り替えない
+    loadTable(table, { switchToChart: !!opts.initial });
     if (opts.initial) {
       switchStep('chart'); // 読み込み直後は完成したグラフをすぐ見せる
       const parts = [table.rows.length.toLocaleString('ja-JP') + '行 × ' + table.columns.length + '列を読み込みました'];
@@ -320,7 +341,8 @@
   }
 
   /** テーブルを取り込み、賢い初期設定でグラフを立ち上げる */
-  function loadTable(table) {
+  function loadTable(table, loadOpts) {
+    loadOpts = loadOpts || { switchToChart: true };
     // 前のデータセットのフィルタ候補リストを掃除（同名列との混同を防ぐ）
     document.querySelectorAll('datalist[id^="dl-"]').forEach(d => d.remove());
     state.raw = table;
@@ -381,7 +403,8 @@
     renderSeriesList();
     renderHistSeriesList();
     renderRefLines();
-    switchView('chart');
+    // 現在表示中のタブ（生データマトリクス等）を、可能な限り維持したまま再同期する
+    switchView(loadOpts.switchToChart ? 'chart' : state.view);
     scheduleUpdate();
   }
 
@@ -393,38 +416,85 @@
     if (!state.importRaw) {
       el.importAdjust.hidden = true;
       el.importAdjust.open = false;
+      el.matrixTab.hidden = true;
+      if (state.view === 'matrix') switchView('chart');
       return;
     }
     el.importAdjust.hidden = false;
+    el.matrixTab.hidden = false;
     const isAuto = !!state.importSuggested &&
       state.importHeaderRow === state.importSuggested.headerRowIndex &&
-      state.importDataStart === state.importSuggested.dataStartRowIndex;
+      state.importDataStart === state.importSuggested.dataStartRowIndex &&
+      state.importExcludedRows.size === 0;
+    const excludedNote = state.importExcludedRows.size ? ' / 除外' + state.importExcludedRows.size + '行' : '';
     el.importSummary.textContent = '取り込み設定 — ヘッダー: ' +
       (state.importHeaderRow >= 0 ? (state.importHeaderRow + 1) + '行目' : 'なし') +
-      ' / データ開始: ' + (state.importDataStart + 1) + '行目' +
+      ' / データ開始: ' + (state.importDataStart + 1) + '行目' + excludedNote +
       (isAuto ? '（自動検出）' : '（手動調整）');
     el.importHeaderRow.value = state.importHeaderRow >= 0 ? state.importHeaderRow + 1 : 0;
     el.importDataStartRow.value = state.importDataStart + 1;
     if (!isAuto) el.importAdjust.open = true;
-    renderImportPreviewTable();
+    renderMatrix();
   }
 
-  /** 生データのプレビュー表（行番号クリックでヘッダー/データ開始を指定） */
-  function renderImportPreviewTable() {
-    const aoa = state.importRaw.aoa;
-    const MAX_ROWS = 30;
-    const MAX_COLS = 12;
-    const shown = Math.min(aoa.length, MAX_ROWS);
-    const width = Math.min(MAX_COLS, Math.max(1, ...aoa.slice(0, shown).map(r => (Array.isArray(r) ? r.length : 0))));
+  // ---------------------------------------------------------------
+  // 生データマトリクス（メイン画面・セル範囲のドラッグ選択で役割を割り当て）
+  // ---------------------------------------------------------------
 
-    el.importPreviewTable.textContent = '';
+  const MATRIX_MAX_ROWS = 200;
+  const MATRIX_MAX_COLS = 30;
+  let matrixAnchor = null;      // { row, col } ドラッグ開始セル
+  let matrixDragging = false;
+  let matrixSelection = null;   // { r1, r2, c1, c2 }（0始まり・raw行/列インデックス）
+  let matrixShownRows = 0;      // 表示中の行数（列見出しクリックで列全体を選択する際に使用）
+
+  /** 0始まり列番号 → スプレッドシート風の列名（A, B, ..., Z, AA, AB, ...） */
+  function colLetter(index) {
+    let n = index, s = '';
+    do {
+      s = String.fromCharCode(65 + (n % 26)) + s;
+      n = Math.floor(n / 26) - 1;
+    } while (n >= 0);
+    return s;
+  }
+
+  /** 生データのマトリクス表（セルをドラッグ選択して役割を割り当てる） */
+  function renderMatrix() {
+    matrixAnchor = null;
+    matrixDragging = false;
+    matrixSelection = null;
+    matrixColDragAnchor = null;
+
+    const aoa = state.importRaw.aoa;
+    const shown = Math.min(aoa.length, MATRIX_MAX_ROWS);
+    const width = Math.min(MATRIX_MAX_COLS, Math.max(1, ...aoa.slice(0, shown).map(r => (Array.isArray(r) ? r.length : 0))));
+    matrixShownRows = shown;
+
+    el.matrixTable.textContent = '';
+
+    const thead = document.createElement('thead');
+    const headRow = document.createElement('tr');
+    const corner = document.createElement('th');
+    corner.className = 'matrix-corner';
+    headRow.appendChild(corner);
+    for (let c = 0; c < width; c++) {
+      const th = document.createElement('th');
+      th.textContent = colLetter(c);
+      th.dataset.col = c;
+      headRow.appendChild(th);
+    }
+    thead.appendChild(headRow);
+    el.matrixTable.appendChild(thead);
+
     const tbody = document.createElement('tbody');
 
     for (let i = 0; i < shown; i++) {
       const row = Array.isArray(aoa[i]) ? aoa[i] : [];
       const tr = document.createElement('tr');
+      const isExcludedManual = state.importExcludedRows.has(i);
       if (i === state.importHeaderRow) tr.classList.add('row-header');
       else if (i < state.importDataStart) tr.classList.add('row-excluded');
+      else if (isExcludedManual) tr.classList.add('row-excluded', 'row-excluded-manual');
 
       const gutter = document.createElement('td');
       gutter.className = 'import-row-gutter';
@@ -450,13 +520,26 @@
       sBtn.textContent = '▶';
       sBtn.title = 'この行からデータ開始';
       sBtn.addEventListener('click', () => commitImport(state.importHeaderRow, i));
-      actions.append(hBtn, sBtn);
+      const xBtn = document.createElement('button');
+      xBtn.type = 'button';
+      xBtn.textContent = '✕';
+      xBtn.title = isExcludedManual ? 'この行の除外を解除' : 'この行を除外（注記・小計行など）';
+      xBtn.addEventListener('click', () => {
+        if (isExcludedManual) state.importExcludedRows.delete(i); else state.importExcludedRows.add(i);
+        commitImport(state.importHeaderRow, state.importDataStart);
+      });
+      actions.append(hBtn, sBtn, xBtn);
       inner.append(num, actions);
 
       if (i === state.importHeaderRow) {
         const badge = document.createElement('span');
         badge.className = 'import-row-badge';
         badge.textContent = 'ヘッダー';
+        inner.appendChild(badge);
+      } else if (isExcludedManual) {
+        const badge = document.createElement('span');
+        badge.className = 'import-row-badge import-row-exclude-badge';
+        badge.textContent = '除外';
         inner.appendChild(badge);
       } else if (i === state.importDataStart) {
         const badge = document.createElement('span');
@@ -471,12 +554,14 @@
         const td = document.createElement('td');
         const v = row[c];
         td.textContent = v === null || v === undefined || v === '' ? '' : String(v);
+        td.dataset.row = i;
+        td.dataset.col = c;
         tr.appendChild(td);
       }
       tbody.appendChild(tr);
     }
 
-    el.importPreviewTable.appendChild(tbody);
+    el.matrixTable.appendChild(tbody);
 
     if (aoa.length > shown) {
       const tr = document.createElement('tr');
@@ -487,6 +572,186 @@
       tr.appendChild(td);
       tbody.appendChild(tr);
     }
+
+    updateMatrixToolbar();
+    syncMatrixColumnRoles();
+  }
+
+  /** 現在のX軸・系列の割り当てを、マトリクスの列見出し（下線色）に反映する（軽量・全体再描画なし） */
+  function syncMatrixColumnRoles() {
+    if (!el.matrixTable || el.matrixCard.hidden || !state.raw) return;
+    const ths = el.matrixTable.querySelectorAll('thead th[data-col]');
+    if (!ths.length) return;
+    const seriesByCol = new Map(state.chart.series.map(s => [s.column, s]));
+    ths.forEach(th => {
+      const c = +th.dataset.col;
+      const col = state.raw.columns[c];
+      th.style.borderBottomWidth = '';
+      th.style.borderBottomColor = '';
+      th.classList.remove('col-role-x', 'col-role-series');
+      if (!col) return;
+      if (col.name === state.chart.x) {
+        th.classList.add('col-role-x');
+        th.style.borderBottomWidth = '3px';
+        th.style.borderBottomColor = 'var(--accent)';
+      } else if (seriesByCol.has(col.name)) {
+        th.classList.add('col-role-series');
+        th.style.borderBottomWidth = '3px';
+        th.style.borderBottomColor = Palette.seriesColor(state.theme, seriesByCol.get(col.name).slot);
+      }
+    });
+  }
+
+  function matrixCellAt(target) {
+    const td = target.closest ? target.closest('td[data-row]') : null;
+    if (!td || !el.matrixTable.contains(td)) return null;
+    return { row: +td.dataset.row, col: +td.dataset.col };
+  }
+
+  /** th（列見出し）または td のどちらの上でも、その列番号を取り出す（列見出しのドラッグ選択用） */
+  function matrixColAt(target) {
+    if (!target.closest) return null;
+    const th = target.closest('th[data-col]');
+    if (th && el.matrixTable.contains(th)) return +th.dataset.col;
+    const td = target.closest('td[data-row]');
+    if (td && el.matrixTable.contains(td)) return +td.dataset.col;
+    return null;
+  }
+
+  function setMatrixSelection(a, b) {
+    if (!a || !b) {
+      matrixSelection = null;
+    } else {
+      matrixSelection = {
+        r1: Math.min(a.row, b.row), r2: Math.max(a.row, b.row),
+        c1: Math.min(a.col, b.col), c2: Math.max(a.col, b.col)
+      };
+    }
+    paintMatrixSelection();
+    updateMatrixToolbar();
+  }
+
+  function paintMatrixSelection() {
+    el.matrixTable.querySelectorAll('td.cell-selected').forEach(td => td.classList.remove('cell-selected'));
+    if (!matrixSelection) return;
+    const { r1, r2, c1, c2 } = matrixSelection;
+    el.matrixTable.querySelectorAll('td[data-row]').forEach(td => {
+      const r = +td.dataset.row, c = +td.dataset.col;
+      if (r >= r1 && r <= r2 && c >= c1 && c <= c2) td.classList.add('cell-selected');
+    });
+  }
+
+  const MATRIX_TOOLBAR_BUTTONS = [
+    'matrixSetHeaderBtn', 'matrixSetDataStartBtn', 'matrixExcludeBtn',
+    'matrixIncludeBtn', 'matrixSetXBtn', 'matrixAddSeriesBtn'
+  ];
+
+  /**
+   * ツールバーは常に同じ高さで表示し続ける（hidden切替はしない）。
+   * ドラッグ中に表示・非表示を切り替えると、その分レイアウトが動いてマウス座標と
+   * セルの対応がずれてしまう（ドラッグ開始直後に別の行を選択してしまう不具合の原因になった）ため、
+   * ボタンの有効/無効切替とラベル文言の更新だけで状態を伝える。
+   */
+  function updateMatrixToolbar() {
+    const hasSelection = !!matrixSelection;
+    MATRIX_TOOLBAR_BUTTONS.forEach(id => { el[id].disabled = !hasSelection; });
+    if (!hasSelection) {
+      el.matrixSelectionLabel.textContent = 'セルをドラッグ、または列見出しをクリックして範囲を選択してください';
+      return;
+    }
+    const { r1, r2, c1, c2 } = matrixSelection;
+    const rows = r2 - r1 + 1, cols = c2 - c1 + 1;
+    el.matrixSelectionLabel.textContent = '選択範囲: ' + rows + '行 × ' + cols + '列 （' +
+      colLetter(c1) + (r1 + 1) + ':' + colLetter(c2) + (r2 + 1) + '）';
+  }
+
+  let matrixColDragAnchor = null; // 列見出しからドラッグ開始した場合の起点列（複数列ドラッグ選択用）
+
+  function initMatrixEvents() {
+    el.matrixTable.addEventListener('mousedown', e => {
+      // 列見出し（A, B, C…）のドラッグ・クリック → 列全体（複数可）を選択（スプレッドシートの慣習に合わせる）
+      const th = e.target.closest ? e.target.closest('th[data-col]') : null;
+      if (th) {
+        e.preventDefault();
+        matrixDragging = true;
+        matrixColDragAnchor = +th.dataset.col;
+        const lastRow = Math.max(0, matrixShownRows - 1);
+        setMatrixSelection({ row: 0, col: matrixColDragAnchor }, { row: lastRow, col: matrixColDragAnchor });
+        return;
+      }
+      const cell = matrixCellAt(e.target);
+      if (!cell) return;
+      e.preventDefault(); // ドラッグ中のテキスト選択を防ぐ
+      matrixDragging = true;
+      matrixColDragAnchor = null;
+      matrixAnchor = cell;
+      setMatrixSelection(cell, cell);
+    });
+    el.matrixTable.addEventListener('mouseover', e => {
+      if (!matrixDragging) return;
+      if (matrixColDragAnchor !== null) {
+        const col = matrixColAt(e.target);
+        if (col === null) return;
+        const lastRow = Math.max(0, matrixShownRows - 1);
+        setMatrixSelection({ row: 0, col: matrixColDragAnchor }, { row: lastRow, col });
+        return;
+      }
+      const cell = matrixCellAt(e.target);
+      if (!cell) return;
+      setMatrixSelection(matrixAnchor, cell);
+    });
+    document.addEventListener('mouseup', () => { matrixDragging = false; matrixColDragAnchor = null; });
+
+    el.matrixSetHeaderBtn.addEventListener('click', () => {
+      if (!matrixSelection) return;
+      const row = matrixSelection.r1;
+      const dataStart = state.importDataStart <= row ? row + 1 : state.importDataStart;
+      commitImport(row, dataStart);
+      showToast('success', (row + 1) + '行目をヘッダーに設定しました');
+    });
+    el.matrixSetDataStartBtn.addEventListener('click', () => {
+      if (!matrixSelection) return;
+      commitImport(state.importHeaderRow, matrixSelection.r1);
+    });
+    el.matrixExcludeBtn.addEventListener('click', () => {
+      if (!matrixSelection) return;
+      for (let r = matrixSelection.r1; r <= matrixSelection.r2; r++) {
+        if (r !== state.importHeaderRow) state.importExcludedRows.add(r);
+      }
+      commitImport(state.importHeaderRow, state.importDataStart);
+      showToast('success', '選択範囲をデータから除外しました');
+    });
+    el.matrixIncludeBtn.addEventListener('click', () => {
+      if (!matrixSelection) return;
+      for (let r = matrixSelection.r1; r <= matrixSelection.r2; r++) state.importExcludedRows.delete(r);
+      commitImport(state.importHeaderRow, state.importDataStart);
+      showToast('success', '選択範囲の除外を解除しました');
+    });
+    el.matrixSetXBtn.addEventListener('click', () => {
+      if (!matrixSelection || !state.raw) return;
+      const col = state.raw.columns[matrixSelection.c1];
+      if (!col) return;
+      setXAxisColumn(col.name);
+    });
+    el.matrixAddSeriesBtn.addEventListener('click', () => {
+      if (!matrixSelection || !state.raw) return;
+      let added = 0, skipped = 0;
+      for (let c = matrixSelection.c1; c <= matrixSelection.c2; c++) {
+        const col = state.raw.columns[c];
+        if (!col) continue;
+        if (col.type !== 'number') { skipped++; continue; }
+        if (state.chart.series.some(s => s.column === col.name)) continue;
+        if (state.chart.series.length >= Palette.MAX_SERIES) { skipped++; continue; }
+        addSeries(col.name);
+        added++;
+      }
+      if (added > 0) {
+        showToast('success', added + '列を系列に追加しました' + (skipped ? '（' + skipped + '列は対象外）' : ''));
+      } else {
+        showToast('warning', '数値の列を選択してください');
+      }
+    });
+    el.openMatrixBtn.addEventListener('click', () => switchView('matrix'));
   }
 
   /**
@@ -525,11 +790,16 @@
     state.importSuggested = null;
     state.importHeaderRow = -1;
     state.importDataStart = 0;
+    state.importExcludedRows = new Set();
+    matrixSelection = null;
+    matrixAnchor = null;
+    matrixColDragAnchor = null;
     if (state.chartInstance) { state.chartInstance.destroy(); state.chartInstance = null; }
     el.fileInfo.hidden = true;
     el.columnSummary.hidden = true;
     el.importAdjust.hidden = true;
     el.importAdjust.open = false;
+    el.matrixTab.hidden = true;
     el.stepTabQuery.disabled = true;
     el.stepTabChart.disabled = true;
     el.stepDataBadge.textContent = '1';
@@ -539,6 +809,7 @@
     el.chartCard.hidden = true;
     el.tableCard.hidden = true;
     el.statsCard.hidden = true;
+    el.matrixCard.hidden = true;
     el.emptyState.hidden = false;
     el.fileInput.value = '';
   }
@@ -988,6 +1259,14 @@
     if (forcedColumn) showToast('success', '「' + forcedColumn + '」を系列に追加しました');
   }
 
+  /** X軸に列を割り当てる（列チップのドロップ・生データマトリクスからの割り当てで共用） */
+  function setXAxisColumn(column) {
+    state.chart.x = column;
+    el.xSelect.value = column;
+    scheduleUpdate();
+    showToast('success', 'X軸を「' + column + '」に設定しました');
+  }
+
   // ---------------------------------------------------------------
   // 基準線
   // ---------------------------------------------------------------
@@ -1379,10 +1658,12 @@
     el.chartCard.hidden = view !== 'chart';
     el.tableCard.hidden = view !== 'table';
     el.statsCard.hidden = view !== 'stats';
+    el.matrixCard.hidden = view !== 'matrix';
     if (view === 'chart' && state.chartInstance) {
       // 非表示中にレイアウトが変わっている可能性があるため再計測
       requestAnimationFrame(() => state.chartInstance && state.chartInstance.resize());
     }
+    if (view === 'matrix') syncMatrixColumnRoles();
   }
 
   function timestamp() {
@@ -1442,12 +1723,7 @@
     // 列チップのドラッグ＆ドロップ — X軸・グループ化・系列へ直接割り当て
     bindColumnDropZone(el.xAxisDropZone, {
       numericOnly: false,
-      onDrop: column => {
-        state.chart.x = column;
-        el.xSelect.value = column;
-        scheduleUpdate();
-        showToast('success', 'X軸を「' + column + '」に設定しました');
-      }
+      onDrop: column => setXAxisColumn(column)
     });
     bindColumnDropZone(el.groupByDropZone, {
       numericOnly: false,
@@ -1499,8 +1775,10 @@
     });
     el.importAutoBtn.addEventListener('click', () => {
       if (!state.importSuggested) return;
+      state.importExcludedRows = new Set();
       commitImport(state.importSuggested.headerRowIndex, state.importSuggested.dataStartRowIndex);
     });
+    initMatrixEvents();
 
     // クエリ
     el.addFilterBtn.addEventListener('click', () => {
