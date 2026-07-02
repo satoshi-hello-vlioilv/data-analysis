@@ -41,13 +41,32 @@
       <!-- ============ 左: コントロールパネル ============ -->
       <aside class="sidebar">
 
-        <!-- ステップ1: データ -->
-        <section class="step" aria-labelledby="stepDataTitle">
-          <header class="step-header">
-            <span class="step-no" aria-hidden="true">1</span>
-            <h2 id="stepDataTitle">データ</h2>
-          </header>
+        <!-- ステップナビゲーション（タブ切替・完了状況を表示） -->
+        <nav class="stepper" role="tablist" aria-label="作業ステップ">
+          <button type="button" class="stepper-tab active" role="tab" aria-selected="true" aria-controls="stepDataPanel" id="stepTabData" data-step="data">
+            <span class="stepper-badge" id="stepDataBadge">1</span>
+            <span class="stepper-label">データ</span>
+          </button>
+          <button type="button" class="stepper-tab" role="tab" aria-selected="false" aria-controls="stepQuery" id="stepTabQuery" data-step="query" disabled>
+            <span class="stepper-badge">2</span>
+            <span class="stepper-label">処理</span>
+            <span class="stepper-count" id="queryStepCount" hidden>0</span>
+          </button>
+          <button type="button" class="stepper-tab" role="tab" aria-selected="false" aria-controls="stepChart" id="stepTabChart" data-step="chart" disabled>
+            <span class="stepper-badge">3</span>
+            <span class="stepper-label">グラフ</span>
+            <span class="stepper-count" id="chartStepCount" hidden>0</span>
+          </button>
+        </nav>
 
+        <!-- 検出した列（全ステップ共通・常時表示） — ドラッグしてX軸・グループ化・系列に割り当て -->
+        <div class="column-summary" id="columnSummary" hidden>
+          <span class="column-summary-title">検出した列<small>（ドラッグしてX軸・グループ化・系列に設定できます）</small></span>
+          <div class="column-chips" id="columnChips"></div>
+        </div>
+
+        <!-- ステップ1: データ -->
+        <section class="step-panel" id="stepDataPanel" role="tabpanel" aria-labelledby="stepTabData">
           <p class="step-hint">サンプルで試すか、手元のファイルを読み込みます</p>
           <div class="sample-grid" id="sampleGrid"></div>
 
@@ -80,14 +99,9 @@
             </button>
           </div>
 
-          <div class="column-summary" id="columnSummary" hidden>
-            <span class="column-summary-title">検出した列（ヘッダー抽出済み）</span>
-            <div class="column-chips" id="columnChips"></div>
-          </div>
-
-          <details class="import-adjust" id="importAdjust" hidden>
+          <details class="accordion import-adjust" id="importAdjust" hidden>
             <summary id="importSummary">取り込み設定を調整</summary>
-            <div class="import-adjust-body">
+            <div class="accordion-body">
               <p class="import-adjust-hint">プレビューの行番号をクリックするとヘッダー行・データ開始行を指定できます。数値での直接入力も可能です。</p>
               <div class="import-row-fields">
                 <div class="field">
@@ -108,50 +122,51 @@
         </section>
 
         <!-- ステップ2: データ処理（クエリ） -->
-        <section class="step" id="stepQuery" aria-labelledby="stepQueryTitle" hidden>
-          <header class="step-header">
-            <span class="step-no" aria-hidden="true">2</span>
-            <h2 id="stepQueryTitle">データ処理</h2>
-          </header>
-
-          <div class="field">
-            <label>フィルタ</label>
-            <div class="filter-list" id="filterList"></div>
-            <button type="button" class="btn ghost sm" id="addFilterBtn">＋ フィルタを追加</button>
-          </div>
-
-          <div class="field">
-            <label for="groupBySelect">グループ化して集計</label>
-            <select id="groupBySelect"></select>
-          </div>
-
-          <div class="field-row">
-            <div class="field">
-              <label for="sortSelect">並び替え</label>
-              <select id="sortSelect"></select>
+        <section class="step-panel" id="stepQuery" role="tabpanel" aria-labelledby="stepTabQuery" hidden>
+          <details class="accordion" id="filterAccordion" open>
+            <summary>フィルタ<span class="accordion-count" id="filterCount" hidden>0</span></summary>
+            <div class="accordion-body">
+              <div class="filter-list" id="filterList"></div>
+              <button type="button" class="btn ghost sm" id="addFilterBtn">＋ フィルタを追加</button>
             </div>
-            <div class="field">
-              <label for="limitInput">行数上限</label>
-              <input type="number" id="limitInput" min="1" step="1" placeholder="すべて" inputmode="numeric">
-            </div>
-          </div>
+          </details>
 
-          <div class="query-preview">
-            <div class="query-preview-head">
-              <span>クエリ（処理内容の写し）</span>
-              <button type="button" class="btn ghost sm" id="copyQueryBtn">コピー</button>
+          <details class="accordion" open>
+            <summary>集計・並び替え</summary>
+            <div class="accordion-body">
+              <div class="field drop-zone" id="groupByDropZone">
+                <label for="groupBySelect">グループ化して集計</label>
+                <select id="groupBySelect"></select>
+              </div>
+              <div class="field-row">
+                <div class="field">
+                  <label for="sortSelect">並び替え</label>
+                  <select id="sortSelect"></select>
+                </div>
+                <div class="field">
+                  <label for="limitInput">行数上限</label>
+                  <input type="number" id="limitInput" min="1" step="1" placeholder="すべて" inputmode="numeric">
+                </div>
+              </div>
             </div>
-            <pre><code id="queryCode"></code></pre>
-          </div>
+          </details>
+
+          <details class="accordion" open>
+            <summary>クエリ（処理内容の写し）</summary>
+            <div class="accordion-body">
+              <div class="query-preview">
+                <div class="query-preview-head">
+                  <span>SQL風プレビュー</span>
+                  <button type="button" class="btn ghost sm" id="copyQueryBtn">コピー</button>
+                </div>
+                <pre><code id="queryCode"></code></pre>
+              </div>
+            </div>
+          </details>
         </section>
 
         <!-- ステップ3: グラフ -->
-        <section class="step" id="stepChart" aria-labelledby="stepChartTitle" hidden>
-          <header class="step-header">
-            <span class="step-no" aria-hidden="true">3</span>
-            <h2 id="stepChartTitle">グラフ</h2>
-          </header>
-
+        <section class="step-panel" id="stepChart" role="tabpanel" aria-labelledby="stepTabChart" hidden>
           <div class="segmented" role="group" aria-label="グラフモード" id="modeSegment">
             <button type="button" data-mode="xy" class="active" aria-pressed="true">XYグラフ</button>
             <button type="button" data-mode="hist" aria-pressed="false">ヒストグラム</button>
@@ -163,14 +178,14 @@
           </div>
 
           <div id="xySettings">
-            <div class="field">
+            <div class="field drop-zone" id="xAxisDropZone">
               <label for="xSelect">X軸の列</label>
               <select id="xSelect"></select>
               <small id="xHint" hidden>グループ化中はグループ列がX軸になります</small>
             </div>
             <div class="field">
               <label>系列（Y軸の列 / 種類を混在可・最大8）</label>
-              <div class="series-list" id="seriesList"></div>
+              <div class="series-list drop-zone" id="seriesList"></div>
               <button type="button" class="btn ghost sm" id="addSeriesBtn">＋ 系列を追加</button>
             </div>
             <label class="toggle-row">
@@ -178,9 +193,9 @@
               <input type="checkbox" id="stackedToggle" class="switch">
             </label>
 
-            <details class="axis-adjust">
+            <details class="accordion axis-adjust">
               <summary>表示範囲・軸ラベルを調整</summary>
-              <div class="axis-adjust-body">
+              <div class="accordion-body">
                 <div class="field-row">
                   <div class="field">
                     <label for="xLabelInput">X軸ラベル</label>
@@ -241,7 +256,7 @@
           <div id="histSettings" hidden>
             <div class="field">
               <label>対象列（数値・重ねて比較可）</label>
-              <div class="series-list" id="histSeriesList"></div>
+              <div class="series-list drop-zone" id="histSeriesList"></div>
               <button type="button" class="btn ghost sm" id="addHistSeriesBtn">＋ 列を追加</button>
             </div>
             <div class="field">
@@ -262,9 +277,9 @@
               <input type="checkbox" id="normalCurveToggle" class="switch">
             </label>
 
-            <details class="axis-adjust">
+            <details class="accordion axis-adjust">
               <summary>表示範囲・軸ラベルを調整</summary>
-              <div class="axis-adjust-body">
+              <div class="accordion-body">
                 <div class="field-row">
                   <div class="field">
                     <label for="histXLabelInput">値軸ラベル（X）</label>
@@ -304,18 +319,20 @@
             </details>
           </div>
 
-          <div class="field">
-            <label>基準線（平均・管理限界など）</label>
-            <div class="reflines" id="refLineList"></div>
-            <div class="quick-refs" id="quickRefs">
-              <button type="button" class="chip-btn" data-ref="mean">平均</button>
-              <button type="button" class="chip-btn" data-ref="median">中央値</button>
-              <button type="button" class="chip-btn" data-ref="p3s">＋3σ</button>
-              <button type="button" class="chip-btn" data-ref="m3s">−3σ</button>
-              <button type="button" class="chip-btn" data-ref="custom">＋ 任意の値</button>
+          <details class="accordion" id="refLineAccordion">
+            <summary>基準線（平均・管理限界など）<span class="accordion-count" id="refLineCount" hidden>0</span></summary>
+            <div class="accordion-body">
+              <div class="reflines" id="refLineList"></div>
+              <div class="quick-refs" id="quickRefs">
+                <button type="button" class="chip-btn" data-ref="mean">平均</button>
+                <button type="button" class="chip-btn" data-ref="median">中央値</button>
+                <button type="button" class="chip-btn" data-ref="p3s">＋3σ</button>
+                <button type="button" class="chip-btn" data-ref="m3s">−3σ</button>
+                <button type="button" class="chip-btn" data-ref="custom">＋ 任意の値</button>
+              </div>
+              <small>最初の系列の値から計算されます。値は後から編集できます</small>
             </div>
-            <small>最初の系列の値から計算されます。値は後から編集できます</small>
-          </div>
+          </details>
         </section>
       </aside>
 

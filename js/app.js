@@ -1,11 +1,16 @@
 /**
  * アプリケーション層 — 状態管理と UI の結線
  *
- * 情報アーキテクチャ:
- *   「1. データ → 2. データ処理（クエリ） → 3. グラフ」の3ステップを
- *   左パネルに直列に配置し、段階的開示（データ読込後に後続ステップを表示）で
- *   認知負荷を抑えます。すべての操作は即時に右のグラフ・テーブル・統計・
- *   クエリプレビューへ反映され、操作と結果の対応が常に見える状態を保ちます。
+ * 情報アーキテクチャ（認知負荷を抑えるための設計）:
+ *   「1. データ → 2. データ処理 → 3. グラフ」の3ステップをタブ形式の
+ *   ステッパーで切り替える（Hickの法則: 一度に見える操作を絞り込むほど
+ *   意思決定が速くなる）。各ステップ内はさらにアコーディオンで主要/詳細を
+ *   分け、チャンキング（Millerの法則）で認知負荷を下げる。
+ *   検出した列はドラッグ＆ドロップでX軸・グループ化・系列に直接割り当て
+ *   られる（再認優位・直接操作 — プルダウンを探すより速く、確実）。
+ *   系列の並び順はドラッグハンドルまたは矢印ボタンで入れ替え可能。
+ *   すべての操作は即時に右のグラフ・テーブル・統計・クエリプレビューへ
+ *   反映され、操作と結果の対応が常に見える状態を保つ。
  */
 (() => {
   'use strict';
@@ -18,6 +23,7 @@
 
   const state = {
     raw: null, // { rows, columns, meta }
+    activeStep: 'data', // 'data' | 'query' | 'chart' — サイドバーのステッパーで選択中のステップ
     query: { filters: [], groupBy: '', sort: 'auto', limit: null },
     chart: {
       mode: 'xy',            // 'xy' | 'hist'
@@ -78,10 +84,22 @@
     importDataStartRow: $('importDataStartRow'),
     importAutoBtn: $('importAutoBtn'),
     importPreviewTable: $('importPreviewTable'),
+
+    // ステッパー（ステップ切替タブ）
+    stepTabData: $('stepTabData'),
+    stepTabQuery: $('stepTabQuery'),
+    stepTabChart: $('stepTabChart'),
+    stepDataBadge: $('stepDataBadge'),
+    stepDataPanel: $('stepDataPanel'),
+    queryStepCount: $('queryStepCount'),
+    chartStepCount: $('chartStepCount'),
+
     stepQuery: $('stepQuery'),
     stepChart: $('stepChart'),
+    filterCount: $('filterCount'),
     filterList: $('filterList'),
     addFilterBtn: $('addFilterBtn'),
+    groupByDropZone: $('groupByDropZone'),
     groupBySelect: $('groupBySelect'),
     sortSelect: $('sortSelect'),
     limitInput: $('limitInput'),
@@ -91,6 +109,7 @@
     chartTitleInput: $('chartTitleInput'),
     xySettings: $('xySettings'),
     histSettings: $('histSettings'),
+    xAxisDropZone: $('xAxisDropZone'),
     xSelect: $('xSelect'),
     xHint: $('xHint'),
     seriesList: $('seriesList'),
@@ -103,6 +122,8 @@
     binCountRange: $('binCountRange'),
     binCountOut: $('binCountOut'),
     normalCurveToggle: $('normalCurveToggle'),
+    refLineAccordion: $('refLineAccordion'),
+    refLineCount: $('refLineCount'),
     refLineList: $('refLineList'),
     quickRefs: $('quickRefs'),
 
@@ -248,6 +269,7 @@
           state.importRaw = null;
           state.importSuggested = null;
           loadTable(sample.build());
+          switchStep('chart'); // 読み込み直後は完成したグラフをすぐ見せる
           showToast('success', 'サンプル「' + sample.name + '」を読み込みました');
         });
         grid.appendChild(btn);
@@ -287,10 +309,12 @@
     state.importDataStart = dataStartRowIndex;
     loadTable(table);
     if (opts.initial) {
+      switchStep('chart'); // 読み込み直後は完成したグラフをすぐ見せる
       const parts = [table.rows.length.toLocaleString('ja-JP') + '行 × ' + table.columns.length + '列を読み込みました'];
       parts.push(table.meta.hasHeader ? 'ヘッダー行を検出' : '列名を自動生成');
       showToast('success', parts.join('・'));
     } else {
+      // 取り込み設定の調整はデータタブで行うため、アクティブなステップは変えない
       showToast('info', '取り込み設定を変更しました（グラフ設定はリセットされます）');
     }
   }
@@ -328,8 +352,10 @@
     el.fileInfoDetail.textContent = table.rows.length.toLocaleString('ja-JP') + '行 × ' + table.columns.length + '列';
     renderColumnChips();
     renderImportPanel();
-    el.stepQuery.hidden = false;
-    el.stepChart.hidden = false;
+    el.stepTabQuery.disabled = false;
+    el.stepTabChart.disabled = false;
+    el.stepDataBadge.textContent = '✓';
+    el.stepDataBadge.classList.add('done');
     el.contentToolbar.hidden = false;
     el.emptyState.hidden = true;
 
@@ -504,8 +530,11 @@
     el.columnSummary.hidden = true;
     el.importAdjust.hidden = true;
     el.importAdjust.open = false;
-    el.stepQuery.hidden = true;
-    el.stepChart.hidden = true;
+    el.stepTabQuery.disabled = true;
+    el.stepTabChart.disabled = true;
+    el.stepDataBadge.textContent = '1';
+    el.stepDataBadge.classList.remove('done');
+    switchStep('data');
     el.contentToolbar.hidden = true;
     el.chartCard.hidden = true;
     el.tableCard.hidden = true;
@@ -514,18 +543,81 @@
     el.fileInput.value = '';
   }
 
+  // ---------------------------------------------------------------
+  // ステッパー（ステップ切替タブ）
+  // ---------------------------------------------------------------
+
+  function switchStep(step) {
+    state.activeStep = step;
+    [el.stepTabData, el.stepTabQuery, el.stepTabChart].forEach(btn => {
+      const active = btn.dataset.step === step;
+      btn.classList.toggle('active', active);
+      btn.setAttribute('aria-selected', String(active));
+    });
+    el.stepDataPanel.hidden = step !== 'data';
+    el.stepQuery.hidden = step !== 'query';
+    el.stepChart.hidden = step !== 'chart';
+  }
+
   function renderColumnChips() {
     el.columnSummary.hidden = false;
     el.columnChips.textContent = '';
     state.raw.columns.forEach(c => {
       const chip = document.createElement('span');
       chip.className = 'column-chip type-' + c.type;
+      chip.draggable = true;
+      chip.title = 'ドラッグしてX軸・グループ化・系列に設定';
       const mark = document.createElement('em');
       mark.textContent = TYPE_LABELS[c.type];
       const name = document.createElement('span');
       name.textContent = c.name;
       chip.append(mark, name);
+      chip.addEventListener('dragstart', e => {
+        e.dataTransfer.effectAllowed = 'copy';
+        e.dataTransfer.setData('application/x-column', c.name);
+        if (c.type === 'number') e.dataTransfer.setData('application/x-column-number', c.name);
+        e.dataTransfer.setData('text/plain', c.name);
+        document.body.classList.add('dnd-column-active');
+        requestAnimationFrame(() => chip.classList.add('dragging'));
+      });
+      chip.addEventListener('dragend', () => {
+        chip.classList.remove('dragging');
+        document.body.classList.remove('dnd-column-active');
+      });
       el.columnChips.appendChild(chip);
+    });
+  }
+
+  /**
+   * 要素を「列チップのドロップ先」にする。
+   * numericOnly: 数値列のみ受け付ける（系列など）
+   * onDrop: (columnName) => void
+   */
+  function bindColumnDropZone(zoneEl, { numericOnly, onDrop }) {
+    if (!zoneEl) return;
+    zoneEl.addEventListener('dragover', e => {
+      if (!e.dataTransfer.types.includes('application/x-column')) return;
+      if (numericOnly && !e.dataTransfer.types.includes('application/x-column-number')) {
+        zoneEl.classList.add('drop-reject');
+        return; // preventDefault しない → ブラウザが「ドロップ不可」カーソルを出す
+      }
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'copy';
+      zoneEl.classList.add('drop-over');
+    });
+    zoneEl.addEventListener('dragleave', () => {
+      zoneEl.classList.remove('drop-over', 'drop-reject');
+    });
+    zoneEl.addEventListener('drop', e => {
+      zoneEl.classList.remove('drop-over', 'drop-reject');
+      if (!e.dataTransfer.types.includes('application/x-column')) return;
+      if (numericOnly && !e.dataTransfer.types.includes('application/x-column-number')) {
+        showToast('warning', 'ここには数値の列だけドロップできます');
+        return;
+      }
+      e.preventDefault();
+      const column = e.dataTransfer.getData('application/x-column');
+      if (column) onDrop(column);
     });
   }
 
@@ -641,6 +733,24 @@
       row.append(colSel, opSel, valInput, removeBtn);
       el.filterList.appendChild(row);
     });
+    updateFilterCount();
+  }
+
+  function updateFilterCount() {
+    const active = state.query.filters.filter(f => f.column && f.op && f.value !== '' && f.value !== null).length;
+    el.filterCount.hidden = active === 0;
+    el.filterCount.textContent = active;
+  }
+
+  /** ステッパー上の「処理」「グラフ」タブに件数バッジを表示（タブを開かなくても状況が分かる） */
+  function updateStepperBadges() {
+    if (!state.raw) return;
+    const active = state.query.filters.filter(f => f.column && f.op && f.value !== '' && f.value !== null).length;
+    el.queryStepCount.hidden = active === 0;
+    el.queryStepCount.textContent = active;
+    const seriesCount = state.chart.series.length;
+    el.chartStepCount.hidden = seriesCount === 0;
+    el.chartStepCount.textContent = seriesCount;
   }
 
   // ---------------------------------------------------------------
@@ -673,16 +783,82 @@
     if (!silent) scheduleUpdate();
   }
 
+  /** 系列を並び替える（ドラッグ・矢印ボタン共通） */
+  function reorderSeries(from, to) {
+    const arr = state.chart.series;
+    if (isNaN(from) || from === to || from < 0 || from >= arr.length || to < 0 || to >= arr.length) return;
+    const [moved] = arr.splice(from, 1);
+    arr.splice(to, 0, moved);
+    renderSeriesList();
+    renderHistSeriesList();
+    scheduleUpdate();
+  }
+
+  /** ドラッグハンドル（並び替え用の取っ手）を生成し、行への配置とドラッグ配線を行う */
+  function createDragHandle(row, idx, label) {
+    const handle = document.createElement('span');
+    handle.className = 'drag-handle';
+    handle.textContent = '⠿';
+    handle.draggable = true;
+    handle.setAttribute('role', 'button');
+    handle.setAttribute('aria-label', label + 'をドラッグして並べ替え');
+    handle.title = 'ドラッグして並べ替え';
+    handle.addEventListener('dragstart', e => {
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('application/x-series-reorder', String(idx));
+      requestAnimationFrame(() => row.classList.add('dragging'));
+    });
+    handle.addEventListener('dragend', () => row.classList.remove('dragging'));
+    row.addEventListener('dragover', e => {
+      if (!e.dataTransfer.types.includes('application/x-series-reorder')) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      row.classList.add('drop-target');
+    });
+    row.addEventListener('dragleave', () => row.classList.remove('drop-target'));
+    row.addEventListener('drop', e => {
+      if (!e.dataTransfer.types.includes('application/x-series-reorder')) return;
+      e.preventDefault();
+      row.classList.remove('drop-target');
+      const from = parseInt(e.dataTransfer.getData('application/x-series-reorder'), 10);
+      reorderSeries(from, idx);
+    });
+    return handle;
+  }
+
+  /** キーボードでも並び替えられる ↑/↓ ボタン（ドラッグのアクセシブルな代替） */
+  function createReorderButtons(idx, total) {
+    const wrap = document.createElement('span');
+    wrap.className = 'reorder-btns';
+    const up = document.createElement('button');
+    up.type = 'button';
+    up.textContent = '▲';
+    up.setAttribute('aria-label', '1つ上へ移動');
+    up.disabled = idx === 0;
+    up.addEventListener('click', () => reorderSeries(idx, idx - 1));
+    const down = document.createElement('button');
+    down.type = 'button';
+    down.textContent = '▼';
+    down.setAttribute('aria-label', '1つ下へ移動');
+    down.disabled = idx === total - 1;
+    down.addEventListener('click', () => reorderSeries(idx, idx + 1));
+    wrap.append(up, down);
+    return wrap;
+  }
+
   /** XYモードの系列行 */
   function renderSeriesList() {
     if (!state.raw) return;
     el.seriesList.textContent = '';
     const nums = numericColumns();
     const grouped = !!state.query.groupBy;
+    const total = state.chart.series.length;
 
     state.chart.series.forEach((series, idx) => {
       const row = document.createElement('div');
       row.className = 'series-row';
+
+      const handle = createDragHandle(row, idx, series.column);
 
       const swatch = document.createElement('span');
       swatch.className = 'swatch';
@@ -706,6 +882,8 @@
       CHART_TYPES.forEach(t => typeSel.appendChild(makeOption(t.id, t.label)));
       typeSel.value = series.type;
 
+      const reorderBtns = createReorderButtons(idx, total);
+
       const removeBtn = document.createElement('button');
       removeBtn.type = 'button';
       removeBtn.className = 'icon-btn sm';
@@ -723,7 +901,7 @@
         scheduleUpdate();
       });
 
-      row.append(swatch, colSel, aggSel, typeSel, removeBtn);
+      row.append(handle, swatch, colSel, aggSel, typeSel, reorderBtns, removeBtn);
       el.seriesList.appendChild(row);
     });
 
@@ -731,6 +909,7 @@
     el.addSeriesBtn.title = state.chart.series.length >= Palette.MAX_SERIES
       ? '系列は最大8つまでです（それ以上は「その他」への集約や複数グラフをご検討ください）'
       : '';
+    updateStepperBadges();
   }
 
   /** ヒストグラムモードの対象列行（同じ series 配列を共有） */
@@ -738,10 +917,13 @@
     if (!state.raw) return;
     el.histSeriesList.textContent = '';
     const nums = numericColumns();
+    const total = state.chart.series.length;
 
     state.chart.series.forEach((series, idx) => {
       const row = document.createElement('div');
       row.className = 'series-row';
+
+      const handle = createDragHandle(row, idx, series.column);
 
       const swatch = document.createElement('span');
       swatch.className = 'swatch';
@@ -752,6 +934,8 @@
       colSel.setAttribute('aria-label', '対象の列');
       nums.forEach(c => colSel.appendChild(makeOption(c.name, c.name)));
       colSel.value = series.column;
+
+      const reorderBtns = createReorderButtons(idx, total);
 
       const removeBtn = document.createElement('button');
       removeBtn.type = 'button';
@@ -768,23 +952,40 @@
         scheduleUpdate();
       });
 
-      row.append(swatch, colSel, removeBtn);
+      row.append(handle, swatch, colSel, reorderBtns, removeBtn);
       el.histSeriesList.appendChild(row);
     });
 
     el.addHistSeriesBtn.disabled = state.chart.series.length >= Palette.MAX_SERIES || nums.length === 0;
+    updateStepperBadges();
   }
 
-  function addSeries() {
+  /** 系列を1つ追加する。forcedColumn を指定すると（列チップのドロップ時など）その列を使う */
+  function addSeries(forcedColumn) {
     const nums = numericColumns();
-    if (!nums.length || state.chart.series.length >= Palette.MAX_SERIES) return;
-    const usedCols = new Set(state.chart.series.map(s => s.column));
-    const nextCol = nums.find(c => !usedCols.has(c.name)) || nums[0];
+    if (!nums.length) return;
+    if (state.chart.series.length >= Palette.MAX_SERIES) {
+      showToast('warning', '系列は最大8つまでです');
+      return;
+    }
+    let nextCol;
+    if (forcedColumn) {
+      if (state.chart.series.some(s => s.column === forcedColumn)) {
+        showToast('info', '「' + forcedColumn + '」は既に系列に追加されています');
+        return;
+      }
+      nextCol = nums.find(c => c.name === forcedColumn);
+      if (!nextCol) return;
+    } else {
+      const usedCols = new Set(state.chart.series.map(s => s.column));
+      nextCol = nums.find(c => !usedCols.has(c.name)) || nums[0];
+    }
     const lastType = state.chart.series.length ? state.chart.series[state.chart.series.length - 1].type : 'bar';
     state.chart.series.push({ id: uid(), column: nextCol.name, agg: 'sum', type: lastType, slot: nextFreeSlot() });
     renderSeriesList();
     renderHistSeriesList();
     scheduleUpdate();
+    if (forcedColumn) showToast('success', '「' + forcedColumn + '」を系列に追加しました');
   }
 
   // ---------------------------------------------------------------
@@ -829,6 +1030,8 @@
       row.append(labelInput, valueInput, removeBtn);
       el.refLineList.appendChild(row);
     });
+    el.refLineCount.hidden = state.refLines.length === 0;
+    el.refLineCount.textContent = state.refLines.length;
   }
 
   function addQuickRef(kind) {
@@ -854,6 +1057,7 @@
     const def = defs[kind];
     if (!def) return;
     state.refLines.push({ id: uid(), label: def.label, value: def.value });
+    el.refLineAccordion.open = true; // 追加した結果がすぐ見えるように展開
     renderRefLines();
     scheduleUpdate();
   }
@@ -881,6 +1085,10 @@
     // タイトル・メタ情報
     el.chartTitle.textContent = buildTitle();
     el.chartMeta.textContent = buildMeta(filtered, model);
+
+    // ステッパーのバッジ（フィルタ件数・系列数など、タブを開かなくても状況が分かるように）
+    updateFilterCount();
+    updateStepperBadges();
 
     // 軸ラベル・表示範囲コントロールの同期（データ範囲ヒント・スライダー等）
     syncAxisRangeUI(model);
@@ -1226,6 +1434,34 @@
       applyTheme(state.theme === 'dark' ? 'light' : 'dark');
     });
 
+    // ステッパー（ステップ切替タブ）
+    [el.stepTabData, el.stepTabQuery, el.stepTabChart].forEach(btn => {
+      btn.addEventListener('click', () => switchStep(btn.dataset.step));
+    });
+
+    // 列チップのドラッグ＆ドロップ — X軸・グループ化・系列へ直接割り当て
+    bindColumnDropZone(el.xAxisDropZone, {
+      numericOnly: false,
+      onDrop: column => {
+        state.chart.x = column;
+        el.xSelect.value = column;
+        scheduleUpdate();
+        showToast('success', 'X軸を「' + column + '」に設定しました');
+      }
+    });
+    bindColumnDropZone(el.groupByDropZone, {
+      numericOnly: false,
+      onDrop: column => {
+        state.query.groupBy = column;
+        el.groupBySelect.value = column;
+        syncGroupByUI();
+        scheduleUpdate();
+        showToast('success', '「' + column + '」でグループ化しました');
+      }
+    });
+    bindColumnDropZone(el.seriesList, { numericOnly: true, onDrop: column => addSeries(column) });
+    bindColumnDropZone(el.histSeriesList, { numericOnly: true, onDrop: column => addSeries(column) });
+
     // ファイル読み込み
     el.dropArea.addEventListener('click', () => el.fileInput.click());
     el.dropArea.addEventListener('keydown', e => {
@@ -1290,8 +1526,8 @@
       btn.addEventListener('click', () => setMode(btn.dataset.mode, false));
     });
     el.xSelect.addEventListener('change', () => { state.chart.x = el.xSelect.value; scheduleUpdate(); });
-    el.addSeriesBtn.addEventListener('click', addSeries);
-    el.addHistSeriesBtn.addEventListener('click', addSeries);
+    el.addSeriesBtn.addEventListener('click', () => addSeries());
+    el.addHistSeriesBtn.addEventListener('click', () => addSeries());
     el.stackedToggle.addEventListener('change', () => { state.chart.stacked = el.stackedToggle.checked; scheduleUpdate(); });
     el.binMethodSelect.addEventListener('change', () => {
       state.chart.bins.method = el.binMethodSelect.value;
@@ -1380,6 +1616,7 @@
     renderSampleGrids();
     populateSortSelect();
     bindEvents();
+    switchStep('data');
   }
 
   if (document.readyState === 'loading') {

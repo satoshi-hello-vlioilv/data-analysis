@@ -152,38 +152,89 @@ button { font-family: inherit; }
    サイドバー（ステップ）
    ========================================================================== */
 
-.sidebar { display: flex; flex-direction: column; gap: 14px; }
+.sidebar { display: flex; flex-direction: column; gap: 12px; }
 
-.step {
+/* --- ステッパー（作業ステップのタブ切替） --- */
+
+.stepper {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 4px;
+  padding: 4px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow);
+  flex-shrink: 0;
+}
+
+.stepper-tab {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 6px;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  color: var(--text-secondary);
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.stepper-tab:hover:not(:disabled) { background: var(--accent-wash); color: var(--accent); }
+
+.stepper-tab.active {
+  background: var(--accent-wash);
+  color: var(--accent-strong);
+}
+
+.stepper-tab:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.stepper-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 19px;
+  height: 19px;
+  border-radius: 50%;
+  background: var(--axis);
+  color: var(--surface);
+  font-size: 11px;
+  font-weight: 700;
+  flex-shrink: 0;
+  transition: background-color 0.15s ease;
+}
+
+.stepper-tab.active .stepper-badge { background: var(--accent); }
+.stepper-badge.done { background: var(--status-good); font-size: 12px; }
+
+.stepper-label { font-size: 12.5px; font-weight: 700; }
+
+.stepper-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+/* --- ステップパネル本体 --- */
+
+.step-panel {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   padding: 16px;
   box-shadow: var(--shadow);
 }
-
-.step-header {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 12px;
-}
-
-.step-no {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 22px;
-  height: 22px;
-  border-radius: 50%;
-  background: var(--accent);
-  color: #fff;
-  font-size: 12px;
-  font-weight: 700;
-  flex-shrink: 0;
-}
-
-.step-header h2 { font-size: 14px; font-weight: 700; }
 
 .step-hint {
   font-size: 12px;
@@ -276,7 +327,15 @@ button { font-family: inherit; }
 
 /* --- 列チップ（型付き） --- */
 
-.column-summary { margin-top: 12px; }
+/* サイドバー直下（全ステップ共通）に置かれる、常時表示の列パレット */
+.column-summary {
+  flex-shrink: 0;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow);
+  padding: 10px 14px;
+}
 .column-summary-title {
   display: block;
   font-size: 11px;
@@ -284,6 +343,7 @@ button { font-family: inherit; }
   color: var(--muted);
   margin-bottom: 6px;
 }
+.column-summary-title small { font-weight: 400; }
 
 .column-chips { display: flex; flex-wrap: wrap; gap: 5px; }
 
@@ -296,7 +356,13 @@ button { font-family: inherit; }
   border-radius: 999px;
   font-size: 11.5px;
   max-width: 100%;
+  cursor: grab;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease;
 }
+
+.column-chip:hover { border-color: var(--accent); }
+.column-chip:active { cursor: grabbing; }
+.column-chip.dragging { opacity: 0.35; }
 
 .column-chip > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
@@ -314,42 +380,66 @@ button { font-family: inherit; }
 .column-chip.type-string em { background: var(--grid); color: var(--text-secondary); }
 
 /* ==========================================================================
-   取り込み設定（ヘッダー行・データ開始行の調整）
+   アコーディオン（折りたたみ）共通コンポーネント
    ========================================================================== */
 
-.import-adjust {
+.accordion {
   margin-top: 12px;
   padding-top: 12px;
   border-top: 1px solid var(--border);
 }
 
-.import-adjust summary {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--accent);
+.accordion:first-child { margin-top: 0; padding-top: 0; border-top: none; }
+
+.accordion > summary {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--text-primary);
   cursor: pointer;
   list-style: none;
   display: flex;
   align-items: center;
-  gap: 5px;
+  gap: 6px;
 }
 
-.import-adjust summary::-webkit-details-marker { display: none; }
+.accordion > summary::-webkit-details-marker { display: none; }
 
-.import-adjust summary::before {
+.accordion > summary::before {
   content: "";
   width: 0;
   height: 0;
-  border-left: 4px solid currentColor;
+  border-left: 4px solid var(--muted);
   border-top: 3.5px solid transparent;
   border-bottom: 3.5px solid transparent;
   transition: transform 0.15s ease;
   flex-shrink: 0;
 }
 
-.import-adjust[open] summary::before { transform: rotate(90deg); }
+.accordion[open] > summary::before { transform: rotate(90deg); }
+.accordion > summary:hover::before { border-left-color: var(--accent); }
 
-.import-adjust-body { margin-top: 10px; }
+.accordion-body { margin-top: 10px; }
+
+.accordion-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: var(--accent-wash);
+  color: var(--accent-strong);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+/* import-adjust / axis-adjust はこの .accordion をベースにした個別バリエーション */
+.import-adjust > summary, .axis-adjust > summary { color: var(--accent); }
+
+/* ==========================================================================
+   取り込み設定（ヘッダー行・データ開始行の調整）
+   ========================================================================== */
 
 .import-adjust-hint {
   font-size: 11px;
@@ -645,10 +735,58 @@ input.switch:checked::after { transform: translateX(14px); }
   display: flex;
   gap: 5px;
   align-items: center;
+  padding: 3px;
+  border-radius: var(--radius-sm);
+  transition: opacity 0.15s ease, background-color 0.1s ease;
 }
 
 .series-row .grow { flex: 1; min-width: 0; }
 .series-row select:not(.grow) { width: auto; flex-shrink: 0; }
+
+.series-row.dragging { opacity: 0.35; }
+.series-row.drop-target { background: var(--accent-wash); box-shadow: inset 0 0 0 1.5px var(--accent); }
+
+/* ドラッグハンドル（系列の並び替え） */
+.drag-handle {
+  flex-shrink: 0;
+  width: 14px;
+  text-align: center;
+  font-size: 13px;
+  line-height: 1;
+  letter-spacing: -1px;
+  color: var(--muted);
+  cursor: grab;
+  user-select: none;
+}
+.drag-handle:hover { color: var(--accent); }
+.drag-handle:active { cursor: grabbing; }
+
+/* キーボードでも並び替えられる上下ボタン */
+.reorder-btns {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  gap: 1px;
+}
+
+.reorder-btns button {
+  width: 16px;
+  height: 12px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 8px;
+  line-height: 1;
+  color: var(--muted);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  cursor: pointer;
+}
+
+.reorder-btns button:hover:not(:disabled) { color: var(--accent); border-color: var(--accent); }
+.reorder-btns button:disabled { opacity: 0.3; cursor: not-allowed; }
 
 .swatch {
   display: inline-block;
@@ -668,42 +806,47 @@ input.switch:checked::after { transform: translateX(14px); }
 }
 
 /* ==========================================================================
-   軸ラベル・表示範囲の調整（折りたたみ）
+   ドラッグ＆ドロップ — 列チップをX軸・グループ化・系列へ
+   列チップのドラッグ中だけドロップ先を控えめに強調する（ドラッグしていない
+   通常時は装飾を出さず、UIをうるさくしない）
    ========================================================================== */
 
-.axis-adjust {
-  margin-top: 12px;
-  padding-top: 12px;
-  border-top: 1px solid var(--border);
+.drop-zone {
+  border-radius: var(--radius-md);
+  transition: background-color 0.15s ease, box-shadow 0.15s ease;
 }
 
-.axis-adjust summary {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--accent);
-  cursor: pointer;
-  list-style: none;
-  display: flex;
-  align-items: center;
-  gap: 5px;
+body.dnd-column-active .drop-zone {
+  outline: 1.5px dashed var(--accent);
+  outline-offset: 3px;
+  background: var(--accent-wash);
 }
 
-.axis-adjust summary::-webkit-details-marker { display: none; }
-
-.axis-adjust summary::before {
-  content: "";
-  width: 0;
-  height: 0;
-  border-left: 4px solid currentColor;
-  border-top: 3.5px solid transparent;
-  border-bottom: 3.5px solid transparent;
-  transition: transform 0.15s ease;
-  flex-shrink: 0;
+body.dnd-column-active .drop-zone.drop-over {
+  outline-style: solid;
+  outline-color: var(--accent-strong);
+  background: var(--accent-wash);
 }
 
-.axis-adjust[open] summary::before { transform: rotate(90deg); }
+body.dnd-column-active .drop-zone.drop-reject {
+  outline-color: var(--status-critical);
+  background: transparent;
+}
 
-.axis-adjust-body { margin-top: 10px; }
+.series-list.drop-zone:empty::before {
+  content: "列をドラッグ、または「＋ 系列を追加」で追加";
+  display: block;
+  padding: 10px;
+  border: 1.5px dashed var(--border);
+  border-radius: var(--radius-md);
+  text-align: center;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+/* ==========================================================================
+   軸ラベル・表示範囲の調整（折りたたみ）
+   ========================================================================== */
 
 .range-field-head {
   display: flex;
