@@ -99,12 +99,20 @@ const Charts = (() => {
     return Math.max(2, Math.min(200, Math.ceil(Math.log2(n) + 1)));
   }
 
-  /** 全系列の値域を共有した階級を計算 */
-  function computeBins(allValues, method, customCount) {
+  /**
+   * 全系列の値域を共有した階級を計算。
+   * rangeOverride が指定されている場合、階級数・階級幅の算出には元データ全体を
+   * 使いつつ、実際に使う値域（min/max）だけを差し替える（表示範囲の絞り込み）。
+   */
+  function computeBins(allValues, method, customCount, rangeOverride) {
     let min = Math.min(...allValues);
     let max = Math.max(...allValues);
     if (min === max) { min -= 0.5; max += 0.5; }
     const count = binCount(allValues, method, customCount);
+    if (rangeOverride && typeof rangeOverride.min === 'number' && typeof rangeOverride.max === 'number' && rangeOverride.max > rangeOverride.min) {
+      min = rangeOverride.min;
+      max = rangeOverride.max;
+    }
     const width = (max - min) / count;
     const edges = [];
     for (let i = 0; i <= count; i++) edges.push(min + width * i);
@@ -141,10 +149,18 @@ const Charts = (() => {
     return null; // 文字列は元の順序を尊重
   }
 
+  /** 系列値の最小・最大（複数系列にまたがる） */
+  function extentOf(seriesValues) {
+    const nums = seriesValues.flat().filter(v => typeof v === 'number' && isFinite(v));
+    if (nums.length === 0) return null;
+    return { min: Math.min(...nums), max: Math.max(...nums) };
+  }
+
   /** XYモード: フィルタ済み行 → ラベル・系列値 */
   function buildXYModel(state, rows, columns) {
     const q = state.query;
     const chart = state.chart;
+    const xy = chart.xy || {};
     const typeOf = {};
     columns.forEach(c => { typeOf[c.name] = c.type; });
 
@@ -196,7 +212,18 @@ const Charts = (() => {
       chart.series.every(s => s.type === 'scatter') &&
       xType === 'number' && !q.groupBy;
 
-    const labels = entries.map(e => e.key === null || e.key === undefined ? '（空欄）' : String(e.key));
+    // 表示範囲（カテゴリ軸のインデックス絞り込み）— スライダーの基準となる全件ラベルは保持
+    const fullLabels = entries.map(e => e.key === null || e.key === undefined ? '（空欄）' : String(e.key));
+    const fullCount = entries.length;
+    let indexStart = 0;
+    let indexEnd = Math.max(0, fullCount - 1);
+    if (!linear && xy.xIndexRange && (xy.xIndexRange.start !== null || xy.xIndexRange.end !== null)) {
+      indexStart = Math.max(0, Math.min(xy.xIndexRange.start ?? 0, fullCount - 1));
+      indexEnd = Math.max(indexStart, Math.min(xy.xIndexRange.end ?? (fullCount - 1), fullCount - 1));
+      entries = entries.slice(indexStart, indexEnd + 1);
+    }
+
+    const labels = fullLabels.slice(indexStart, indexEnd + 1);
 
     const toNum = k => {
       const n = typeof k === 'number' ? k : DataLayer.toNumber(k);
@@ -217,14 +244,23 @@ const Charts = (() => {
       };
     });
 
+    const yExtent = extentOf(seriesModels.map(s => s.values));
+    const xExtent = linear ? extentOf(seriesModels.map(s => (s.points || []).map(p => p.x))) : null;
+
     return {
       mode: 'xy',
       linear,
       labels,
       series: seriesModels,
-      xTitle: xName || '行番号',
+      xTitle: (xy.xLabel && xy.xLabel.trim()) || xName || '行番号',
+      yTitle: (xy.yLabel && xy.yLabel.trim()) || (chart.series.length === 1 ? seriesModels[0].label : ''),
       stacked: !!chart.stacked,
-      entries
+      entries,
+      fullLabels,
+      fullLabelCount: fullCount,
+      xIndexRange: { start: indexStart, end: indexEnd },
+      xExtent,
+      yExtent
     };
   }
 
@@ -253,14 +289,23 @@ const Charts = (() => {
   /** ヒストグラムモード */
   function buildHistModel(state, rows) {
     const chart = state.chart;
+    const hist = chart.hist || {};
     const seriesValues = chart.series.map(s =>
       rows.map(r => r[s.column]).filter(v => typeof v === 'number' && isFinite(v))
     );
     const all = seriesValues.flat();
     if (all.length === 0) return null;
+    const dataExtent = extentOf([all]);
+
+    const rangeOverride = hist.valueRange && (typeof hist.valueRange.min === 'number' || typeof hist.valueRange.max === 'number')
+      ? {
+          min: typeof hist.valueRange.min === 'number' ? hist.valueRange.min : dataExtent.min,
+          max: typeof hist.valueRange.max === 'number' ? hist.valueRange.max : dataExtent.max
+        }
+      : null;
 
     const bins = extendBinsForRefLines(
-      computeBins(all, chart.bins.method, chart.bins.count),
+      computeBins(all, chart.bins.method, chart.bins.count, rangeOverride),
       state.refLines
     );
     const labels = bins.edges.slice(0, -1).map((e, i) =>
@@ -279,7 +324,10 @@ const Charts = (() => {
       };
     });
 
-    return { mode: 'hist', bins, labels, series: seriesModels };
+    const xTitle = (hist.xLabel && hist.xLabel.trim()) || (chart.series.length === 1 ? seriesModels[0].label : '値の階級');
+    const yTitle = (hist.yLabel && hist.yLabel.trim()) || '度数';
+
+    return { mode: 'hist', bins, labels, series: seriesModels, xTitle, yTitle, dataExtent };
   }
 
   // ---------------------------------------------------------------
@@ -371,6 +419,10 @@ const Charts = (() => {
 
   function reducedMotion() {
     return window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  }
+
+  function isFiniteNum(v) {
+    return typeof v === 'number' && isFinite(v);
   }
 
   /** 系列モデル → Chart.js dataset */
@@ -475,10 +527,17 @@ const Charts = (() => {
 
   /**
    * モデルを canvas に描画して Chart インスタンスを返す
-   * refLines: [{label, value}] / theme: 'light' | 'dark'
+   * viewOptions: { refLines: [{label,value}], xRange: {min,max}, yRange: {min,max} }
+   *   xRange は線形X軸（散布図）のみに適用。カテゴリ軸の絞り込みはモデル構築時に
+   *   labels/values を既にトリムしているため、ここでは何もしない。
+   * theme: 'light' | 'dark'
    */
-  function render(canvas, model, theme, refLines, existingChart) {
+  function render(canvas, model, theme, viewOptions, existingChart) {
     const t = Palette.tokens(theme);
+    const opts = viewOptions || {};
+    const refLines = opts.refLines || [];
+    const xRange = opts.xRange || {};
+    const yRange = opts.yRange || {};
     if (existingChart) existingChart.destroy();
 
     Chart.defaults.font.family = FONT_STACK;
@@ -562,6 +621,8 @@ const Charts = (() => {
             stacked: model.mode === 'xy' && model.stacked,
             grid: { display: linear, color: t.grid, drawTicks: false },
             border: { color: t.axis },
+            min: linear && isFiniteNum(xRange.min) ? xRange.min : undefined,
+            max: linear && isFiniteNum(xRange.max) ? xRange.max : undefined,
             // カテゴリ軸に callback を渡すとデフォルトのラベル解決が壊れるため線形軸のみ
             ticks: Object.assign(
               {
@@ -574,20 +635,22 @@ const Charts = (() => {
             ),
             title: {
               display: !!model.xTitle,
-              text: model.mode === 'hist' ? (model.series.length === 1 ? model.series[0].label : '値の階級') : model.xTitle,
+              text: model.xTitle,
               color: t.muted,
               font: { size: 11 }
             }
           },
           y: {
             stacked: model.mode === 'xy' && model.stacked,
-            beginAtZero: hasBarLike,
+            beginAtZero: hasBarLike && !isFiniteNum(yRange.min),
+            min: isFiniteNum(yRange.min) ? yRange.min : undefined,
+            max: isFiniteNum(yRange.max) ? yRange.max : undefined,
             grid: { color: t.grid, drawTicks: false },
             border: { display: false },
             ticks: { color: t.muted, precision: model.mode === 'hist' ? 0 : undefined, callback: v => fmt(v) },
             title: {
-              display: model.mode === 'hist' || realSeriesCount === 1,
-              text: model.mode === 'hist' ? '度数' : (model.series[0] ? model.series[0].label : ''),
+              display: !!model.yTitle,
+              text: model.yTitle || '',
               color: t.muted,
               font: { size: 11 }
             }
@@ -596,10 +659,6 @@ const Charts = (() => {
       },
       plugins: [crosshairPlugin, refLinesPlugin]
     };
-
-    if (linear) {
-      config.options.scales.x.title.text = model.xTitle;
-    }
 
     return new Chart(canvas.getContext('2d'), config);
   }

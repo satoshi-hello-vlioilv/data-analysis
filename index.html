@@ -84,6 +84,27 @@
             <span class="column-summary-title">検出した列（ヘッダー抽出済み）</span>
             <div class="column-chips" id="columnChips"></div>
           </div>
+
+          <details class="import-adjust" id="importAdjust" hidden>
+            <summary id="importSummary">取り込み設定を調整</summary>
+            <div class="import-adjust-body">
+              <p class="import-adjust-hint">プレビューの行番号をクリックするとヘッダー行・データ開始行を指定できます。数値での直接入力も可能です。</p>
+              <div class="import-row-fields">
+                <div class="field">
+                  <label for="importHeaderRow">ヘッダー行<small>（0=ヘッダーなし）</small></label>
+                  <input type="number" id="importHeaderRow" min="0" step="1" inputmode="numeric">
+                </div>
+                <div class="field">
+                  <label for="importDataStartRow">データ開始行</label>
+                  <input type="number" id="importDataStartRow" min="1" step="1" inputmode="numeric">
+                </div>
+                <button type="button" class="btn ghost sm" id="importAutoBtn">自動検出に戻す</button>
+              </div>
+              <div class="import-preview-scroll" tabindex="0">
+                <table id="importPreviewTable" class="import-preview-table"></table>
+              </div>
+            </div>
+          </details>
         </section>
 
         <!-- ステップ2: データ処理（クエリ） -->
@@ -136,6 +157,11 @@
             <button type="button" data-mode="hist" aria-pressed="false">ヒストグラム</button>
           </div>
 
+          <div class="field">
+            <label for="chartTitleInput">グラフタイトル</label>
+            <input type="text" id="chartTitleInput" placeholder="自動生成されたタイトルを使用">
+          </div>
+
           <div id="xySettings">
             <div class="field">
               <label for="xSelect">X軸の列</label>
@@ -151,6 +177,65 @@
               <span>積み上げ表示（棒・面）</span>
               <input type="checkbox" id="stackedToggle" class="switch">
             </label>
+
+            <details class="axis-adjust">
+              <summary>表示範囲・軸ラベルを調整</summary>
+              <div class="axis-adjust-body">
+                <div class="field-row">
+                  <div class="field">
+                    <label for="xLabelInput">X軸ラベル</label>
+                    <input type="text" id="xLabelInput" placeholder="自動">
+                  </div>
+                  <div class="field">
+                    <label for="yLabelInput">Y軸ラベル</label>
+                    <input type="text" id="yLabelInput" placeholder="自動">
+                  </div>
+                </div>
+
+                <div class="field range-field">
+                  <div class="range-field-head">
+                    <label>Y軸の表示範囲</label>
+                    <button type="button" class="link-btn" data-reset="xyY">自動に戻す</button>
+                  </div>
+                  <div class="range-inputs">
+                    <input type="number" id="yRangeMin" placeholder="自動" step="any">
+                    <span>〜</span>
+                    <input type="number" id="yRangeMax" placeholder="自動" step="any">
+                  </div>
+                  <small id="yRangeHint"></small>
+                </div>
+
+                <div class="field range-field" id="xRangeNumericField" hidden>
+                  <div class="range-field-head">
+                    <label>X軸の表示範囲</label>
+                    <button type="button" class="link-btn" data-reset="xyX">自動に戻す</button>
+                  </div>
+                  <div class="range-inputs">
+                    <input type="number" id="xRangeMin" placeholder="自動" step="any">
+                    <span>〜</span>
+                    <input type="number" id="xRangeMax" placeholder="自動" step="any">
+                  </div>
+                  <small id="xRangeHint"></small>
+                </div>
+
+                <div class="field range-field" id="xIndexRangeField" hidden>
+                  <div class="range-field-head">
+                    <label>表示するデータ範囲</label>
+                    <button type="button" class="link-btn" data-reset="xyIndex">すべて表示</button>
+                  </div>
+                  <div class="range-dual" id="xIndexSlider">
+                    <div class="range-dual-track"></div>
+                    <div class="range-dual-fill" id="xIndexFill"></div>
+                    <input type="range" id="xIndexMin" class="range-dual-input" aria-label="表示範囲の開始位置">
+                    <input type="range" id="xIndexMax" class="range-dual-input" aria-label="表示範囲の終了位置">
+                  </div>
+                  <div class="range-dual-labels">
+                    <span id="xIndexFromLabel"></span>
+                    <span id="xIndexToLabel"></span>
+                  </div>
+                </div>
+              </div>
+            </details>
           </div>
 
           <div id="histSettings" hidden>
@@ -176,6 +261,47 @@
               <span>正規分布カーブを重ねる</span>
               <input type="checkbox" id="normalCurveToggle" class="switch">
             </label>
+
+            <details class="axis-adjust">
+              <summary>表示範囲・軸ラベルを調整</summary>
+              <div class="axis-adjust-body">
+                <div class="field-row">
+                  <div class="field">
+                    <label for="histXLabelInput">値軸ラベル（X）</label>
+                    <input type="text" id="histXLabelInput" placeholder="自動">
+                  </div>
+                  <div class="field">
+                    <label for="histYLabelInput">度数軸ラベル（Y）</label>
+                    <input type="text" id="histYLabelInput" placeholder="度数">
+                  </div>
+                </div>
+
+                <div class="field range-field">
+                  <div class="range-field-head">
+                    <label>値の表示範囲（階級の元になる範囲）</label>
+                    <button type="button" class="link-btn" data-reset="histValue">自動に戻す</button>
+                  </div>
+                  <div class="range-inputs">
+                    <input type="number" id="histValueMin" placeholder="自動" step="any">
+                    <span>〜</span>
+                    <input type="number" id="histValueMax" placeholder="自動" step="any">
+                  </div>
+                  <small id="histValueHint"></small>
+                </div>
+
+                <div class="field range-field">
+                  <div class="range-field-head">
+                    <label>度数の表示範囲（Y軸）</label>
+                    <button type="button" class="link-btn" data-reset="histFreq">自動に戻す</button>
+                  </div>
+                  <div class="range-inputs">
+                    <input type="number" id="histFreqMin" placeholder="自動" step="any">
+                    <span>〜</span>
+                    <input type="number" id="histFreqMax" placeholder="自動" step="any">
+                  </div>
+                </div>
+              </div>
+            </details>
           </div>
 
           <div class="field">

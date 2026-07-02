@@ -25,14 +25,32 @@
       series: [],            // [{ id, column, agg, type, slot }]
       stacked: false,
       bins: { method: 'sturges', count: 10 },
-      normalCurve: false
+      normalCurve: false,
+      title: '',             // グラフタイトルの手動指定（空欄=自動）
+      xy: {
+        xLabel: '', yLabel: '',                        // 軸ラベルの手動指定（空欄=自動）
+        xRange: { min: null, max: null },               // 線形X軸（散布図）の表示範囲
+        yRange: { min: null, max: null },               // Y軸の表示範囲
+        xIndexRange: { start: null, end: null }          // カテゴリX軸の表示データ範囲（インデックス）
+      },
+      hist: {
+        xLabel: '', yLabel: '',
+        valueRange: { min: null, max: null },            // 値の表示範囲（階級の元になる範囲）
+        freqRange: { min: null, max: null }               // 度数（Y軸）の表示範囲
+      }
     },
     refLines: [],            // [{ id, label, value }]
     theme: 'light',
     view: 'chart',
     chartInstance: null,
     lastModel: null,
-    lastTable: null           // { columns: [names], rows: [[...]] } — グラフの等価テーブル
+    lastTable: null,          // { columns: [names], rows: [[...]] } — グラフの等価テーブル
+
+    // 取り込み設定（ヘッダー行・データ開始行の手動調整）— ファイル読込時のみ使用
+    importRaw: null,          // { aoa, sourceName } | null（サンプルデータ利用時は null）
+    importSuggested: null,    // { headerRowIndex, dataStartRowIndex } 自動検出値
+    importHeaderRow: -1,
+    importDataStart: 0
   };
 
   let uidCounter = 0;
@@ -54,6 +72,12 @@
     removeFileBtn: $('removeFileBtn'),
     columnSummary: $('columnSummary'),
     columnChips: $('columnChips'),
+    importAdjust: $('importAdjust'),
+    importSummary: $('importSummary'),
+    importHeaderRow: $('importHeaderRow'),
+    importDataStartRow: $('importDataStartRow'),
+    importAutoBtn: $('importAutoBtn'),
+    importPreviewTable: $('importPreviewTable'),
     stepQuery: $('stepQuery'),
     stepChart: $('stepChart'),
     filterList: $('filterList'),
@@ -64,6 +88,7 @@
     queryCode: $('queryCode'),
     copyQueryBtn: $('copyQueryBtn'),
     modeSegment: $('modeSegment'),
+    chartTitleInput: $('chartTitleInput'),
     xySettings: $('xySettings'),
     histSettings: $('histSettings'),
     xSelect: $('xSelect'),
@@ -80,6 +105,32 @@
     normalCurveToggle: $('normalCurveToggle'),
     refLineList: $('refLineList'),
     quickRefs: $('quickRefs'),
+
+    // 軸ラベル・表示範囲（XY）
+    xLabelInput: $('xLabelInput'),
+    yLabelInput: $('yLabelInput'),
+    yRangeMin: $('yRangeMin'),
+    yRangeMax: $('yRangeMax'),
+    yRangeHint: $('yRangeHint'),
+    xRangeNumericField: $('xRangeNumericField'),
+    xRangeMin: $('xRangeMin'),
+    xRangeMax: $('xRangeMax'),
+    xRangeHint: $('xRangeHint'),
+    xIndexRangeField: $('xIndexRangeField'),
+    xIndexFill: $('xIndexFill'),
+    xIndexMin: $('xIndexMin'),
+    xIndexMax: $('xIndexMax'),
+    xIndexFromLabel: $('xIndexFromLabel'),
+    xIndexToLabel: $('xIndexToLabel'),
+
+    // 軸ラベル・表示範囲（ヒストグラム）
+    histXLabelInput: $('histXLabelInput'),
+    histYLabelInput: $('histYLabelInput'),
+    histValueMin: $('histValueMin'),
+    histValueMax: $('histValueMax'),
+    histValueHint: $('histValueHint'),
+    histFreqMin: $('histFreqMin'),
+    histFreqMax: $('histFreqMax'),
     contentToolbar: $('contentToolbar'),
     emptyState: $('emptyState'),
     chartCard: $('chartCard'),
@@ -193,6 +244,9 @@
         desc.textContent = sample.desc;
         btn.append(name, desc);
         btn.addEventListener('click', () => {
+          // サンプルデータは既に整形済みのため、取り込み設定（生プレビュー）は不要
+          state.importRaw = null;
+          state.importSuggested = null;
           loadTable(sample.build());
           showToast('success', 'サンプル「' + sample.name + '」を読み込みました');
         });
@@ -203,17 +257,42 @@
 
   function handleFile(file) {
     if (!file) return;
-    DataLayer.parseFile(file)
-      .then(table => {
-        loadTable(table);
-        const parts = [table.rows.length.toLocaleString('ja-JP') + '行 × ' + table.columns.length + '列を読み込みました'];
-        parts.push(table.meta.hasHeader ? 'ヘッダー行を検出' : '列名を自動生成');
-        if (table.meta.skippedRows > 0) parts.push('前置き' + table.meta.skippedRows + '行をスキップ');
-        showToast('success', parts.join('・'));
+    DataLayer.parseFileRaw(file)
+      .then(({ aoa, sourceName }) => {
+        const suggested = DataLayer.suggestStructure(aoa);
+        state.importRaw = { aoa, sourceName };
+        state.importSuggested = suggested;
+        commitImport(suggested.headerRowIndex, suggested.dataStartRowIndex, { initial: true });
       })
       .catch(err => {
         showToast('error', err.message || 'ファイルの読み込みに失敗しました');
       });
+  }
+
+  /**
+   * 取り込み設定（ヘッダー行・データ開始行）を確定し、テーブルを再構築する。
+   * ファイル選択直後の初回確定にも、プレビューでの手動調整にも使う。
+   */
+  function commitImport(headerRowIndex, dataStartRowIndex, opts) {
+    if (!state.importRaw) return;
+    opts = opts || {};
+    let table;
+    try {
+      table = DataLayer.buildTable(state.importRaw.aoa, headerRowIndex, dataStartRowIndex, state.importRaw.sourceName);
+    } catch (err) {
+      showToast('error', err.message || 'この設定では取り込めません');
+      return;
+    }
+    state.importHeaderRow = headerRowIndex;
+    state.importDataStart = dataStartRowIndex;
+    loadTable(table);
+    if (opts.initial) {
+      const parts = [table.rows.length.toLocaleString('ja-JP') + '行 × ' + table.columns.length + '列を読み込みました'];
+      parts.push(table.meta.hasHeader ? 'ヘッダー行を検出' : '列名を自動生成');
+      showToast('success', parts.join('・'));
+    } else {
+      showToast('info', '取り込み設定を変更しました（グラフ設定はリセットされます）');
+    }
   }
 
   /** テーブルを取り込み、賢い初期設定でグラフを立ち上げる */
@@ -228,6 +307,18 @@
     state.chart.normalCurve = false;
     state.chart.bins = { method: 'sturges', count: 10 };
     state.chart.series = [];
+    state.chart.title = '';
+    state.chart.xy = {
+      xLabel: '', yLabel: '',
+      xRange: { min: null, max: null },
+      yRange: { min: null, max: null },
+      xIndexRange: { start: null, end: null }
+    };
+    state.chart.hist = {
+      xLabel: '', yLabel: '',
+      valueRange: { min: null, max: null },
+      freqRange: { min: null, max: null }
+    };
 
     smartDefaults();
 
@@ -236,6 +327,7 @@
     el.fileInfoName.textContent = table.meta.sourceName;
     el.fileInfoDetail.textContent = table.rows.length.toLocaleString('ja-JP') + '行 × ' + table.columns.length + '列';
     renderColumnChips();
+    renderImportPanel();
     el.stepQuery.hidden = false;
     el.stepChart.hidden = false;
     el.contentToolbar.hidden = false;
@@ -249,6 +341,15 @@
     el.normalCurveToggle.checked = false;
     el.binMethodSelect.value = 'sturges';
     el.binCountField.hidden = true;
+    el.chartTitleInput.value = '';
+    el.xLabelInput.value = '';
+    el.yLabelInput.value = '';
+    el.yRangeMin.value = ''; el.yRangeMax.value = '';
+    el.xRangeMin.value = ''; el.xRangeMax.value = '';
+    el.histXLabelInput.value = '';
+    el.histYLabelInput.value = '';
+    el.histValueMin.value = ''; el.histValueMax.value = '';
+    el.histFreqMin.value = ''; el.histFreqMax.value = '';
     setMode('xy', true);
     renderFilters();
     renderSeriesList();
@@ -256,6 +357,110 @@
     renderRefLines();
     switchView('chart');
     scheduleUpdate();
+  }
+
+  // ---------------------------------------------------------------
+  // 取り込み設定パネル（ヘッダー行・データ開始行の手動調整）
+  // ---------------------------------------------------------------
+
+  function renderImportPanel() {
+    if (!state.importRaw) {
+      el.importAdjust.hidden = true;
+      el.importAdjust.open = false;
+      return;
+    }
+    el.importAdjust.hidden = false;
+    const isAuto = !!state.importSuggested &&
+      state.importHeaderRow === state.importSuggested.headerRowIndex &&
+      state.importDataStart === state.importSuggested.dataStartRowIndex;
+    el.importSummary.textContent = '取り込み設定 — ヘッダー: ' +
+      (state.importHeaderRow >= 0 ? (state.importHeaderRow + 1) + '行目' : 'なし') +
+      ' / データ開始: ' + (state.importDataStart + 1) + '行目' +
+      (isAuto ? '（自動検出）' : '（手動調整）');
+    el.importHeaderRow.value = state.importHeaderRow >= 0 ? state.importHeaderRow + 1 : 0;
+    el.importDataStartRow.value = state.importDataStart + 1;
+    if (!isAuto) el.importAdjust.open = true;
+    renderImportPreviewTable();
+  }
+
+  /** 生データのプレビュー表（行番号クリックでヘッダー/データ開始を指定） */
+  function renderImportPreviewTable() {
+    const aoa = state.importRaw.aoa;
+    const MAX_ROWS = 30;
+    const MAX_COLS = 12;
+    const shown = Math.min(aoa.length, MAX_ROWS);
+    const width = Math.min(MAX_COLS, Math.max(1, ...aoa.slice(0, shown).map(r => (Array.isArray(r) ? r.length : 0))));
+
+    el.importPreviewTable.textContent = '';
+    const tbody = document.createElement('tbody');
+
+    for (let i = 0; i < shown; i++) {
+      const row = Array.isArray(aoa[i]) ? aoa[i] : [];
+      const tr = document.createElement('tr');
+      if (i === state.importHeaderRow) tr.classList.add('row-header');
+      else if (i < state.importDataStart) tr.classList.add('row-excluded');
+
+      const gutter = document.createElement('td');
+      gutter.className = 'import-row-gutter';
+      const inner = document.createElement('div');
+      inner.className = 'import-row-gutter-inner';
+
+      const num = document.createElement('span');
+      num.className = 'import-row-num';
+      num.textContent = String(i + 1);
+
+      const actions = document.createElement('span');
+      actions.className = 'import-row-actions';
+      const hBtn = document.createElement('button');
+      hBtn.type = 'button';
+      hBtn.textContent = 'H';
+      hBtn.title = 'この行をヘッダーに設定';
+      hBtn.addEventListener('click', () => {
+        const dataStart = state.importDataStart <= i ? i + 1 : state.importDataStart;
+        commitImport(i, dataStart);
+      });
+      const sBtn = document.createElement('button');
+      sBtn.type = 'button';
+      sBtn.textContent = '▶';
+      sBtn.title = 'この行からデータ開始';
+      sBtn.addEventListener('click', () => commitImport(state.importHeaderRow, i));
+      actions.append(hBtn, sBtn);
+      inner.append(num, actions);
+
+      if (i === state.importHeaderRow) {
+        const badge = document.createElement('span');
+        badge.className = 'import-row-badge';
+        badge.textContent = 'ヘッダー';
+        inner.appendChild(badge);
+      } else if (i === state.importDataStart) {
+        const badge = document.createElement('span');
+        badge.className = 'import-row-badge';
+        badge.textContent = '開始';
+        inner.appendChild(badge);
+      }
+      gutter.appendChild(inner);
+      tr.appendChild(gutter);
+
+      for (let c = 0; c < width; c++) {
+        const td = document.createElement('td');
+        const v = row[c];
+        td.textContent = v === null || v === undefined || v === '' ? '' : String(v);
+        tr.appendChild(td);
+      }
+      tbody.appendChild(tr);
+    }
+
+    el.importPreviewTable.appendChild(tbody);
+
+    if (aoa.length > shown) {
+      const tr = document.createElement('tr');
+      tr.className = 'row-more';
+      const td = document.createElement('td');
+      td.colSpan = width + 1;
+      td.textContent = '… 全' + aoa.length.toLocaleString('ja-JP') + '行中、先頭' + shown.toLocaleString('ja-JP') + '行を表示';
+      tr.appendChild(td);
+      tbody.appendChild(tr);
+    }
   }
 
   /**
@@ -290,9 +495,15 @@
     state.raw = null;
     state.chart.series = [];
     state.refLines = [];
+    state.importRaw = null;
+    state.importSuggested = null;
+    state.importHeaderRow = -1;
+    state.importDataStart = 0;
     if (state.chartInstance) { state.chartInstance.destroy(); state.chartInstance = null; }
     el.fileInfo.hidden = true;
     el.columnSummary.hidden = true;
+    el.importAdjust.hidden = true;
+    el.importAdjust.open = false;
     el.stepQuery.hidden = true;
     el.stepChart.hidden = true;
     el.contentToolbar.hidden = true;
@@ -671,13 +882,21 @@
     el.chartTitle.textContent = buildTitle();
     el.chartMeta.textContent = buildMeta(filtered, model);
 
+    // 軸ラベル・表示範囲コントロールの同期（データ範囲ヒント・スライダー等）
+    syncAxisRangeUI(model);
+
     // グラフ描画
     const hasData = model && (model.mode === 'hist' ? model.series.length > 0 : model.labels.length > 0);
     if (hasData) {
       el.chartNotice.hidden = true;
       el.chartCanvas.hidden = false;
       const refs = state.refLines.filter(l => l.value !== null && l.value !== undefined && isFinite(l.value));
-      state.chartInstance = Charts.render(el.chartCanvas, model, state.theme, refs, state.chartInstance);
+      const viewOptions = {
+        refLines: refs,
+        xRange: state.chart.mode === 'xy' ? state.chart.xy.xRange : {},
+        yRange: state.chart.mode === 'xy' ? state.chart.xy.yRange : state.chart.hist.freqRange
+      };
+      state.chartInstance = Charts.render(el.chartCanvas, model, state.theme, viewOptions, state.chartInstance);
     } else {
       if (state.chartInstance) { state.chartInstance.destroy(); state.chartInstance = null; }
       el.chartCanvas.hidden = true;
@@ -692,8 +911,89 @@
     switchView(state.view);
   }
 
+  // ---------------------------------------------------------------
+  // 軸ラベル・表示範囲コントロール
+  // ---------------------------------------------------------------
+
+  function rangeHintText(ext) {
+    return ext ? 'データの範囲: ' + Charts.fmt(ext.min) + ' 〜 ' + Charts.fmt(ext.max) : '';
+  }
+
+  /** モデルの実データ範囲に合わせて、範囲コントロールの表示切替・ヒント・スライダーを更新 */
+  function syncAxisRangeUI(model) {
+    if (state.chart.mode === 'xy') {
+      const linear = !!(model && model.linear);
+      el.xRangeNumericField.hidden = !linear;
+      el.xIndexRangeField.hidden = linear;
+      el.yRangeHint.textContent = model ? rangeHintText(model.yExtent) : '';
+      el.xRangeHint.textContent = model && linear ? rangeHintText(model.xExtent) : '';
+      if (!linear) syncIndexSlider(model);
+    } else {
+      el.histValueHint.textContent = model ? rangeHintText(model.dataExtent) : '';
+    }
+  }
+
+  /** 範囲入力欄（空欄=自動）を数値または null に変換 */
+  function parseRangeInput(inputEl) {
+    const s = inputEl.value.trim();
+    if (s === '') return null;
+    const v = parseFloat(s);
+    return isFinite(v) ? v : null;
+  }
+
+  /** 範囲コントロールを自動（空欄）に戻す */
+  function resetRange(kind) {
+    switch (kind) {
+      case 'xyY':
+        state.chart.xy.yRange = { min: null, max: null };
+        el.yRangeMin.value = ''; el.yRangeMax.value = '';
+        break;
+      case 'xyX':
+        state.chart.xy.xRange = { min: null, max: null };
+        el.xRangeMin.value = ''; el.xRangeMax.value = '';
+        break;
+      case 'xyIndex':
+        state.chart.xy.xIndexRange = { start: null, end: null };
+        break;
+      case 'histValue':
+        state.chart.hist.valueRange = { min: null, max: null };
+        el.histValueMin.value = ''; el.histValueMax.value = '';
+        break;
+      case 'histFreq':
+        state.chart.hist.freqRange = { min: null, max: null };
+        el.histFreqMin.value = ''; el.histFreqMax.value = '';
+        break;
+      default: return;
+    }
+    scheduleUpdate();
+  }
+
+  /** カテゴリX軸の表示データ範囲を選ぶデュアルスライダーを同期 */
+  function syncIndexSlider(model) {
+    const count = model ? model.fullLabelCount : 0;
+    const maxIdx = Math.max(0, count - 1);
+    el.xIndexMin.min = 0; el.xIndexMin.max = maxIdx;
+    el.xIndexMax.min = 0; el.xIndexMax.max = maxIdx;
+
+    const range = state.chart.xy.xIndexRange;
+    const start = range.start !== null ? Math.min(range.start, maxIdx) : 0;
+    const end = range.end !== null ? Math.min(range.end, maxIdx) : maxIdx;
+    el.xIndexMin.value = start;
+    el.xIndexMax.value = end;
+    el.xIndexMin.disabled = el.xIndexMax.disabled = count <= 1;
+
+    const pct = v => maxIdx > 0 ? (v / maxIdx) * 100 : 0;
+    el.xIndexFill.style.left = pct(start) + '%';
+    el.xIndexFill.style.right = (100 - pct(end)) + '%';
+
+    const labels = model ? model.fullLabels : [];
+    el.xIndexFromLabel.textContent = labels[start] !== undefined ? labels[start] : '';
+    el.xIndexToLabel.textContent = labels[end] !== undefined ? labels[end] : '';
+  }
+
   function buildTitle() {
     const s = state.chart;
+    if (s.title && s.title.trim()) return s.title.trim();
     if (s.series.length === 0) return 'グラフ';
     if (s.mode === 'hist') {
       return [...new Set(s.series.map(x => x.column))].join('・') + ' の分布';
@@ -947,6 +1247,25 @@
     });
     el.removeFileBtn.addEventListener('click', clearData);
 
+    // 取り込み設定（ヘッダー行・データ開始行）
+    el.importHeaderRow.addEventListener('change', () => {
+      let v = parseInt(el.importHeaderRow.value, 10);
+      if (!isFinite(v) || v < 0) v = 0;
+      const header = v === 0 ? -1 : v - 1;
+      let dataStart = state.importDataStart;
+      if (header >= 0 && dataStart <= header) dataStart = header + 1;
+      commitImport(header, dataStart);
+    });
+    el.importDataStartRow.addEventListener('change', () => {
+      let v = parseInt(el.importDataStartRow.value, 10);
+      if (!isFinite(v) || v < 1) v = 1;
+      commitImport(state.importHeaderRow, v - 1);
+    });
+    el.importAutoBtn.addEventListener('click', () => {
+      if (!state.importSuggested) return;
+      commitImport(state.importSuggested.headerRowIndex, state.importSuggested.dataStartRowIndex);
+    });
+
     // クエリ
     el.addFilterBtn.addEventListener('click', () => {
       const first = state.raw.columns.find(c => c.type === 'string') || state.raw.columns[0];
@@ -987,6 +1306,51 @@
     el.normalCurveToggle.addEventListener('change', () => {
       state.chart.normalCurve = el.normalCurveToggle.checked;
       scheduleUpdate();
+    });
+
+    // グラフタイトル
+    el.chartTitleInput.addEventListener('input', () => {
+      state.chart.title = el.chartTitleInput.value;
+      scheduleUpdate();
+    });
+
+    // 軸ラベル・表示範囲（XY）
+    el.xLabelInput.addEventListener('input', () => { state.chart.xy.xLabel = el.xLabelInput.value; scheduleUpdate(); });
+    el.yLabelInput.addEventListener('input', () => { state.chart.xy.yLabel = el.yLabelInput.value; scheduleUpdate(); });
+    el.yRangeMin.addEventListener('input', () => { state.chart.xy.yRange.min = parseRangeInput(el.yRangeMin); scheduleUpdate(); });
+    el.yRangeMax.addEventListener('input', () => { state.chart.xy.yRange.max = parseRangeInput(el.yRangeMax); scheduleUpdate(); });
+    el.xRangeMin.addEventListener('input', () => { state.chart.xy.xRange.min = parseRangeInput(el.xRangeMin); scheduleUpdate(); });
+    el.xRangeMax.addEventListener('input', () => { state.chart.xy.xRange.max = parseRangeInput(el.xRangeMax); scheduleUpdate(); });
+
+    // 表示するデータ範囲（カテゴリX軸のインデックス範囲スライダー）
+    el.xIndexMin.addEventListener('input', () => {
+      let min = parseInt(el.xIndexMin.value, 10);
+      const max = parseInt(el.xIndexMax.value, 10);
+      if (min > max) { min = max; el.xIndexMin.value = min; }
+      state.chart.xy.xIndexRange.start = min;
+      state.chart.xy.xIndexRange.end = max;
+      scheduleUpdate();
+    });
+    el.xIndexMax.addEventListener('input', () => {
+      const min = parseInt(el.xIndexMin.value, 10);
+      let max = parseInt(el.xIndexMax.value, 10);
+      if (max < min) { max = min; el.xIndexMax.value = max; }
+      state.chart.xy.xIndexRange.start = min;
+      state.chart.xy.xIndexRange.end = max;
+      scheduleUpdate();
+    });
+
+    // 軸ラベル・表示範囲（ヒストグラム）
+    el.histXLabelInput.addEventListener('input', () => { state.chart.hist.xLabel = el.histXLabelInput.value; scheduleUpdate(); });
+    el.histYLabelInput.addEventListener('input', () => { state.chart.hist.yLabel = el.histYLabelInput.value; scheduleUpdate(); });
+    el.histValueMin.addEventListener('input', () => { state.chart.hist.valueRange.min = parseRangeInput(el.histValueMin); scheduleUpdate(); });
+    el.histValueMax.addEventListener('input', () => { state.chart.hist.valueRange.max = parseRangeInput(el.histValueMax); scheduleUpdate(); });
+    el.histFreqMin.addEventListener('input', () => { state.chart.hist.freqRange.min = parseRangeInput(el.histFreqMin); scheduleUpdate(); });
+    el.histFreqMax.addEventListener('input', () => { state.chart.hist.freqRange.max = parseRangeInput(el.histFreqMax); scheduleUpdate(); });
+
+    // 範囲リセットボタン
+    document.querySelectorAll('.link-btn[data-reset]').forEach(btn => {
+      btn.addEventListener('click', () => resetRange(btn.dataset.reset));
     });
 
     // 基準線

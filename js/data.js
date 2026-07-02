@@ -1,12 +1,14 @@
 /**
  * データ層 — ファイル読込・ヘッダー抽出・型推論・サンプルデータ
  *
- * CSV / Excel を「行列（配列の配列）」に正規化した上で、共通の
- * ヘッダー抽出パイプラインに通します。
- *   1. 空行・前置きのタイトル行を除去
- *   2. ヘッダー行の有無をヒューリスティックで判定
- *   3. 列名の補完（空欄→「列N」）と重複の解消（→「名前_2」）
- *   4. 列ごとの型推論（数値 / 日付 / テキスト）と値の正規化
+ * CSV / Excel を「行列（配列の配列 = AOA）」に正規化した上で、3段のパイプ
+ * ラインに通します。
+ *   1. parseFileRaw    — ファイル → AOA（生の行列、フィルタ・加工なし）
+ *   2. suggestStructure — AOA → ヘッダー行・データ開始行の推定（ヒューリスティック）
+ *   3. buildTable       — AOA + ヘッダー行/データ開始行 → { rows, columns, meta }
+ *                          （列名の補完・重複解消、列ごとの型推論と値の正規化）
+ * 2と3を分離しているのは、UI側でヘッダー行/データ開始行を手動調整できるように
+ * するため（自動推定はあくまで初期値の提案）。
  */
 const DataLayer = (() => {
   'use strict';
@@ -77,24 +79,78 @@ const DataLayer = (() => {
   }
 
   // ---------------------------------------------------------------
-  // ヘッダー抽出パイプライン
+  // 1. ファイル読込 → 生の行列（AOA）
+  // ---------------------------------------------------------------
+
+  /** CSV / TSV ファイル → 生の行列（フィルタ・型推論なし、行番号を保つ） */
+  function parseCSVRaw(file) {
+    return new Promise((resolve, reject) => {
+      Papa.parse(file, {
+        header: false,
+        dynamicTyping: false,
+        skipEmptyLines: false,
+        delimitersToGuess: [',', '\t', ';', '|'],
+        complete: results => {
+          if (!results.data || results.data.length === 0) {
+            reject(new Error('ファイルにデータが含まれていません'));
+            return;
+          }
+          const aoa = results.data;
+          // BOM 除去
+          if (typeof aoa[0][0] === 'string') aoa[0][0] = aoa[0][0].replace(/^﻿/, '');
+          resolve({ aoa, sourceName: file.name });
+        },
+        error: err => reject(new Error('CSVの解析に失敗しました: ' + err.message))
+      });
+    });
+  }
+
+  /** Excel (.xlsx / .xls) ファイル → 生の行列（先頭シート） */
+  function parseExcelRaw(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = e => {
+        try {
+          const wb = XLSX.read(new Uint8Array(e.target.result), { type: 'array', cellDates: true });
+          const sheetName = wb.SheetNames[0];
+          if (!sheetName) { reject(new Error('シートが見つかりません')); return; }
+          const aoa = XLSX.utils.sheet_to_json(wb.Sheets[sheetName], { header: 1, raw: true, defval: null });
+          if (aoa.length === 0) { reject(new Error('シートにデータが含まれていません')); return; }
+          resolve({ aoa, sourceName: file.name + ' (' + sheetName + ')' });
+        } catch (err) {
+          reject(new Error('Excelの解析に失敗しました: ' + err.message));
+        }
+      };
+      reader.onerror = () => reject(new Error('ファイルの読み込みに失敗しました'));
+      reader.readAsArrayBuffer(file);
+    });
+  }
+
+  /** 拡張子で振り分け → { aoa, sourceName } */
+  function parseFileRaw(file) {
+    const name = file.name.toLowerCase();
+    if (name.endsWith('.xlsx') || name.endsWith('.xls')) return parseExcelRaw(file);
+    if (name.endsWith('.csv') || name.endsWith('.tsv') || name.endsWith('.txt')) return parseCSVRaw(file);
+    return Promise.reject(new Error('対応していないファイル形式です（CSV / TSV / XLSX / XLS）'));
+  }
+
+  // ---------------------------------------------------------------
+  // 2. 構造推定 — ヘッダー行・データ開始行をヒューリスティックで提案
   // ---------------------------------------------------------------
 
   /**
-   * 行列（配列の配列）→ { rows, columns, meta }
-   * ヘッダー行の検出・列名の補完・型推論までを一括で行う。
+   * AOA → { headerRowIndex, dataStartRowIndex }（いずれも0始まりの行番号）
+   * headerRowIndex = -1 はヘッダー行なしを意味する。
+   * あくまで初期値の「提案」であり、UI側で手動上書き可能。
    */
-  function extractTable(aoa, sourceName) {
-    // BOM 除去
-    if (aoa.length && typeof aoa[0][0] === 'string') {
-      aoa[0][0] = aoa[0][0].replace(/^﻿/, '');
-    }
+  function suggestStructure(aoa) {
+    const nonBlank = []; // 元の行番号のうち非空行のインデックス
+    aoa.forEach((row, i) => {
+      if (Array.isArray(row) && row.some(c => !isEmptyCell(c))) nonBlank.push(i);
+    });
+    if (nonBlank.length === 0) return { headerRowIndex: -1, dataStartRowIndex: 0 };
 
-    // 完全な空行を除去
-    let grid = aoa.filter(row => Array.isArray(row) && row.some(c => !isEmptyCell(c)));
-    if (grid.length === 0) {
-      throw new Error('データが含まれていません');
-    }
+    const grid = nonBlank.map(i => aoa[i]);
 
     // 本来の列数 = 非空セル数の最頻値（先頭50行から推定）
     const counts = grid.slice(0, 50).map(r => r.filter(c => !isEmptyCell(c)).length);
@@ -116,16 +172,14 @@ const DataLayer = (() => {
     ) {
       skipped++;
     }
-    grid = grid.slice(skipped);
 
-    const width = Math.max(...grid.map(r => r.length));
-
-    // --- ヘッダー行の判定 ---
-    const cand = grid[0];
-    const body = grid.slice(1, 26);
+    const candPos = skipped; // grid上の位置
+    const cand = grid[candPos];
+    const body = grid.slice(candPos + 1, candPos + 26);
+    const width = Math.max(...grid.slice(candPos).map(r => r.length));
     let hasHeader = false;
 
-    if (grid.length === 1) {
+    if (grid.length - candPos <= 1) {
       hasHeader = false; // 1行だけならデータ行とみなす
     } else {
       let score = 0;
@@ -149,8 +203,6 @@ const DataLayer = (() => {
       if (score > 0) {
         hasHeader = true;
       } else if (score === 0) {
-        // 全列テキストの表など判別しづらい場合:
-        // 先頭行が「すべて非空・非数値・重複なし」ならヘッダーとみなす
         const cells = cand.slice(0, width);
         const nonEmpty = cells.filter(c => !isEmptyCell(c));
         const uniq = new Set(nonEmpty.map(c => String(c).trim()));
@@ -160,11 +212,45 @@ const DataLayer = (() => {
       }
     }
 
+    const headerRowIndex = hasHeader ? nonBlank[candPos] : -1;
+    const dataStartRowIndex = hasHeader ? nonBlank[candPos] + 1 : nonBlank[candPos];
+    return { headerRowIndex, dataStartRowIndex };
+  }
+
+  // ---------------------------------------------------------------
+  // 3. テーブル構築 — 指定したヘッダー行/データ開始行で確定
+  // ---------------------------------------------------------------
+
+  /**
+   * AOA + ヘッダー行/データ開始行 → { rows, columns, meta }
+   * headerRowIndex: -1 = ヘッダーなし（列名は「列1」「列2」…を自動生成）
+   * dataStartRowIndex: この行（0始まり）からをデータ本体として扱う
+   */
+  function buildTable(aoa, headerRowIndex, dataStartRowIndex, sourceName) {
+    const hasHeader = headerRowIndex !== null && headerRowIndex !== undefined && headerRowIndex >= 0 && headerRowIndex < aoa.length;
+    const startIndex = Math.max(0, Math.min(dataStartRowIndex, aoa.length));
+    const headerRow = hasHeader ? aoa[headerRowIndex] : null;
+
+    const bodyRows = aoa
+      .slice(startIndex)
+      .filter((row, i) => startIndex + i !== headerRowIndex) // ヘッダー行がデータ開始行以降に来ても二重計上しない
+      .filter(row => Array.isArray(row) && row.some(c => !isEmptyCell(c)));
+
+    const width = Math.max(
+      headerRow ? headerRow.length : 0,
+      ...bodyRows.map(r => r.length),
+      1
+    );
+
+    if (bodyRows.length === 0 && !hasHeader) {
+      throw new Error('データが含まれていません（データ開始行を見直してください）');
+    }
+
     // --- 列名の決定（空欄補完・重複解消） ---
     const names = [];
     const used = new Set();
     for (let c = 0; c < width; c++) {
-      let name = hasHeader && !isEmptyCell(cand[c]) ? String(cand[c]).trim() : '列' + (c + 1);
+      let name = hasHeader && headerRow && !isEmptyCell(headerRow[c]) ? String(headerRow[c]).trim() : '列' + (c + 1);
       let unique = name;
       let k = 2;
       while (used.has(unique)) { unique = name + '_' + k; k++; }
@@ -172,13 +258,11 @@ const DataLayer = (() => {
       names.push(unique);
     }
 
-    const dataRows = hasHeader ? grid.slice(1) : grid;
-
     // --- 型推論（列ごと・最大1000行サンプル） ---
     const types = names.map((_, c) => {
       const sample = [];
-      for (let r = 0; r < dataRows.length && sample.length < 1000; r++) {
-        const v = dataRows[r][c];
+      for (let r = 0; r < bodyRows.length && sample.length < 1000; r++) {
+        const v = bodyRows[r][c];
         if (!isEmptyCell(v)) sample.push(v);
       }
       if (sample.length === 0) return 'string';
@@ -190,7 +274,7 @@ const DataLayer = (() => {
     });
 
     // --- 行オブジェクト化＋値の正規化 ---
-    const rows = dataRows.map(r => {
+    const rows = bodyRows.map(r => {
       const obj = {};
       for (let c = 0; c < width; c++) {
         let v = r[c];
@@ -214,65 +298,19 @@ const DataLayer = (() => {
       meta: {
         sourceName: sourceName || 'データ',
         hasHeader,
-        skippedRows: skipped
+        headerRowIndex: hasHeader ? headerRowIndex : -1,
+        dataStartRowIndex: startIndex,
+        totalRawRows: aoa.length
       }
     };
   }
 
-  // ---------------------------------------------------------------
-  // ファイル読込
-  // ---------------------------------------------------------------
-
-  /** CSV / TSV ファイル → テーブル */
-  function parseCSVFile(file) {
-    return new Promise((resolve, reject) => {
-      Papa.parse(file, {
-        header: false,
-        dynamicTyping: false,
-        skipEmptyLines: 'greedy',
-        delimitersToGuess: [',', '\t', ';', '|'],
-        complete: results => {
-          try {
-            if (!results.data || results.data.length === 0) {
-              reject(new Error('CSVファイルにデータが含まれていません'));
-              return;
-            }
-            resolve(extractTable(results.data, file.name));
-          } catch (err) {
-            reject(err);
-          }
-        },
-        error: err => reject(new Error('CSVの解析に失敗しました: ' + err.message))
-      });
-    });
-  }
-
-  /** Excel (.xlsx / .xls) ファイル → テーブル（先頭シート） */
-  function parseExcelFile(file) {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = e => {
-        try {
-          const wb = XLSX.read(new Uint8Array(e.target.result), { type: 'array', cellDates: true });
-          const sheetName = wb.SheetNames[0];
-          if (!sheetName) { reject(new Error('シートが見つかりません')); return; }
-          const aoa = XLSX.utils.sheet_to_json(wb.Sheets[sheetName], { header: 1, raw: true, defval: null });
-          resolve(extractTable(aoa, file.name + ' (' + sheetName + ')'));
-        } catch (err) {
-          reject(new Error('Excelの解析に失敗しました: ' + err.message));
-        }
-      };
-      reader.onerror = () => reject(new Error('ファイルの読み込みに失敗しました'));
-      reader.readAsArrayBuffer(file);
-    });
-  }
-
-  /** 拡張子で振り分け */
+  /** ファイル → テーブル（自動推定した構造でそのまま確定する簡易パス） */
   function parseFile(file) {
-    const name = file.name.toLowerCase();
-    if (name.endsWith('.xlsx') || name.endsWith('.xls')) return parseExcelFile(file);
-    if (name.endsWith('.csv') || name.endsWith('.tsv') || name.endsWith('.txt')) return parseCSVFile(file);
-    return Promise.reject(new Error('対応していないファイル形式です（CSV / TSV / XLSX / XLS）'));
+    return parseFileRaw(file).then(({ aoa, sourceName }) => {
+      const s = suggestStructure(aoa);
+      return buildTable(aoa, s.headerRowIndex, s.dataStartRowIndex, sourceName);
+    });
   }
 
   // ---------------------------------------------------------------
@@ -325,7 +363,7 @@ const DataLayer = (() => {
         { name: '広告費', type: 'number' },
         { name: '利益', type: 'number' }
       ],
-      meta: { sourceName: '月次売上実績（サンプル）', hasHeader: true, skippedRows: 0 }
+      meta: { sourceName: '月次売上実績（サンプル）', hasHeader: true }
     };
   }
 
@@ -354,7 +392,7 @@ const DataLayer = (() => {
         { name: '検査員', type: 'string' },
         { name: '測定値', type: 'number' }
       ],
-      meta: { sourceName: '部品寸法測定（サンプル）', hasHeader: true, skippedRows: 0 }
+      meta: { sourceName: '部品寸法測定（サンプル）', hasHeader: true }
     };
   }
 
@@ -380,7 +418,7 @@ const DataLayer = (() => {
         { name: '売上', type: 'number' },
         { name: '前年売上', type: 'number' }
       ],
-      meta: { sourceName: '店舗別カテゴリ売上（サンプル）', hasHeader: true, skippedRows: 0 }
+      meta: { sourceName: '店舗別カテゴリ売上（サンプル）', hasHeader: true }
     };
   }
 
@@ -404,7 +442,7 @@ const DataLayer = (() => {
         { name: '平均気温', type: 'number' },
         { name: '販売数', type: 'number' }
       ],
-      meta: { sourceName: '気温とアイス販売（サンプル）', hasHeader: true, skippedRows: 0 }
+      meta: { sourceName: '気温とアイス販売（サンプル）', hasHeader: true }
     };
   }
 
@@ -428,8 +466,10 @@ const DataLayer = (() => {
   ];
 
   return {
+    parseFileRaw,
+    suggestStructure,
+    buildTable,
     parseFile,
-    extractTable,
     SAMPLES,
     isNumLike,
     toNumber,

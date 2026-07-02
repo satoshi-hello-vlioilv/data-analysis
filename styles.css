@@ -313,6 +313,130 @@ button { font-family: inherit; }
 .column-chip.type-string em { background: var(--grid); color: var(--text-secondary); }
 
 /* ==========================================================================
+   取り込み設定（ヘッダー行・データ開始行の調整）
+   ========================================================================== */
+
+.import-adjust {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.import-adjust summary {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent);
+  cursor: pointer;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.import-adjust summary::-webkit-details-marker { display: none; }
+
+.import-adjust summary::before {
+  content: "";
+  width: 0;
+  height: 0;
+  border-left: 4px solid currentColor;
+  border-top: 3.5px solid transparent;
+  border-bottom: 3.5px solid transparent;
+  transition: transform 0.15s ease;
+  flex-shrink: 0;
+}
+
+.import-adjust[open] summary::before { transform: rotate(90deg); }
+
+.import-adjust-body { margin-top: 10px; }
+
+.import-adjust-hint {
+  font-size: 11px;
+  color: var(--muted);
+  line-height: 1.6;
+  margin-bottom: 10px;
+}
+
+.import-row-fields {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+
+.import-row-fields .field { margin-bottom: 0; flex: 1; min-width: 96px; }
+.import-row-fields label small { font-weight: 400; color: var(--muted); }
+
+.import-preview-scroll {
+  max-height: 260px;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+
+.import-preview-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11.5px;
+}
+
+.import-preview-table td, .import-preview-table th {
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--grid);
+  white-space: nowrap;
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.import-row-gutter {
+  position: relative;
+  min-width: 68px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  cursor: default;
+}
+
+.import-row-gutter-inner { display: flex; align-items: center; gap: 4px; }
+
+.import-row-num { flex-shrink: 0; }
+
+.import-row-actions { display: inline-flex; gap: 2px; opacity: 0; transition: opacity 0.1s ease; }
+.import-preview-table tr:hover .import-row-actions { opacity: 1; }
+
+.import-row-actions button {
+  padding: 1px 5px;
+  font-size: 9.5px;
+  font-weight: 700;
+  line-height: 1.5;
+  color: var(--accent);
+  background: var(--accent-wash);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.import-row-actions button:hover { background: var(--accent); color: #fff; }
+
+.import-preview-table tr.row-header { background: var(--accent-wash); }
+.import-preview-table tr.row-header td, .import-preview-table tr.row-header th { font-weight: 700; color: var(--accent-strong); }
+.import-preview-table tr.row-excluded { opacity: 0.4; }
+.import-preview-table tr.row-more td { text-align: center; color: var(--muted); font-style: italic; }
+
+.import-row-badge {
+  display: inline-block;
+  margin-left: 5px;
+  padding: 0 5px;
+  font-size: 9.5px;
+  font-weight: 700;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #fff;
+  vertical-align: middle;
+}
+
+/* ==========================================================================
    フォームコントロール
    ========================================================================== */
 
@@ -540,6 +664,152 @@ input.switch:checked::after { transform: translateX(14px); }
   grid-template-columns: 1.2fr 1fr auto;
   gap: 5px;
   align-items: center;
+}
+
+/* ==========================================================================
+   軸ラベル・表示範囲の調整（折りたたみ）
+   ========================================================================== */
+
+.axis-adjust {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.axis-adjust summary {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent);
+  cursor: pointer;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.axis-adjust summary::-webkit-details-marker { display: none; }
+
+.axis-adjust summary::before {
+  content: "";
+  width: 0;
+  height: 0;
+  border-left: 4px solid currentColor;
+  border-top: 3.5px solid transparent;
+  border-bottom: 3.5px solid transparent;
+  transition: transform 0.15s ease;
+  flex-shrink: 0;
+}
+
+.axis-adjust[open] summary::before { transform: rotate(90deg); }
+
+.axis-adjust-body { margin-top: 10px; }
+
+.range-field-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 5px;
+}
+
+.range-field-head label { margin-bottom: 0; }
+
+.link-btn {
+  padding: 0;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accent);
+  background: none;
+  border: none;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.link-btn:hover { text-decoration: underline; }
+
+.range-inputs {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.range-inputs input { width: 0; flex: 1; }
+.range-inputs span { color: var(--muted); font-size: 11px; flex-shrink: 0; }
+
+.range-field small { margin-top: 4px; }
+
+/* デュアルレンジスライダー（カテゴリ軸の表示データ範囲） */
+.range-dual {
+  position: relative;
+  height: 26px;
+  margin-top: 4px;
+}
+
+.range-dual-track {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  right: 0;
+  height: 4px;
+  margin-top: -2px;
+  background: var(--grid);
+  border-radius: 999px;
+}
+
+.range-dual-fill {
+  position: absolute;
+  top: 50%;
+  height: 4px;
+  margin-top: -2px;
+  background: var(--accent);
+  border-radius: 999px;
+}
+
+.range-dual-input {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 26px;
+  margin: 0;
+  appearance: none;
+  background: transparent;
+  pointer-events: none;
+}
+
+.range-dual-input::-webkit-slider-runnable-track { background: transparent; }
+.range-dual-input::-moz-range-track { background: transparent; }
+
+.range-dual-input::-webkit-slider-thumb {
+  appearance: none;
+  pointer-events: auto;
+  width: 15px;
+  height: 15px;
+  margin-top: 6px;
+  border-radius: 50%;
+  background: var(--surface-raised);
+  border: 2px solid var(--accent);
+  cursor: pointer;
+  box-shadow: 0 1px 2px rgba(11, 11, 11, 0.2);
+}
+
+.range-dual-input::-moz-range-thumb {
+  pointer-events: auto;
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background: var(--surface-raised);
+  border: 2px solid var(--accent);
+  cursor: pointer;
+  box-shadow: 0 1px 2px rgba(11, 11, 11, 0.2);
+}
+
+.range-dual-labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 2px;
 }
 
 /* ==========================================================================
