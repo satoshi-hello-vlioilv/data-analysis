@@ -135,8 +135,8 @@
             <summary>集計・並び替え</summary>
             <div class="accordion-body">
               <div class="field drop-zone" id="groupByDropZone">
-                <label for="groupBySelect">グループ化して集計</label>
-                <select id="groupBySelect"></select>
+                <label>グループ化して集計</label>
+                <div class="col-picker-slot" id="groupBySelect"></div>
               </div>
               <div class="field-row">
                 <div class="field">
@@ -198,8 +198,8 @@
 
           <div id="xySettings">
             <div class="field drop-zone" id="xAxisDropZone">
-              <label for="xSelect">X軸の列</label>
-              <select id="xSelect"></select>
+              <label>X軸の列</label>
+              <div class="col-picker-slot" id="xSelect"></div>
               <small id="xHint" hidden>グループ化中はグループ列がX軸になります</small>
             </div>
             <div class="field">
@@ -501,6 +501,9 @@
       <small>CSV・TSV・XLSX・XLS に対応 — 画面のどこにドロップしてもOKです</small>
     </div>
   </div>
+
+  <!-- 列選択リストボックス（X軸・系列・グループ化で共用するポータルパネル。1つだけ開く） -->
+  <div class="col-picker-panel" id="colPickerPortal" role="listbox" hidden></div>
 
   <!-- ライブラリ（同梱 — オフラインでも動作） -->
   <script src="vendor/chart.umd.min.js"></script>

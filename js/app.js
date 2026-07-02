@@ -200,7 +200,8 @@
     toast: $('toast'),
     toastIcon: $('toastIcon'),
     toastMessage: $('toastMessage'),
-    fileDropOverlay: $('fileDropOverlay')
+    fileDropOverlay: $('fileDropOverlay'),
+    colPickerPortal: $('colPickerPortal')
   };
 
   // ---------------------------------------------------------------
@@ -238,6 +239,196 @@
     o.value = value;
     o.textContent = label;
     return o;
+  }
+
+  // ---------------------------------------------------------------
+  // 列選択リストボックス（col-picker） — ネイティブ select の代替
+  //
+  // X軸・グループ化・系列の列名は、行の横幅次第では選択中の値が完全に
+  // 見えなくなってしまう（ネイティブ select が幅0近くまで潰れると文字が
+  // 表示されない）。トリガーは省略表示＋ツールチップに留めつつ、開いた
+  // パネルは document.body 直下のポータルとして描画することで、行や
+  // サイドバーの横幅・スクロール枠に縛られず全項目名を省略なく表示する。
+  // 同時に開けるパネルは1つだけ（ネイティブ select と同じ振る舞い）。
+  // ---------------------------------------------------------------
+
+  let activeColPicker = null; // { trigger, options, onSelect }
+
+  function closeColumnPicker() {
+    if (!activeColPicker) return;
+    const { trigger } = activeColPicker;
+    el.colPickerPortal.hidden = true;
+    el.colPickerPortal.textContent = '';
+    trigger.setAttribute('aria-expanded', 'false');
+    trigger.classList.remove('active');
+    activeColPicker = null;
+  }
+
+  /** パネルをトリガーの直下（画面端では上や左へ補正して）に配置する */
+  function positionColPickerPanel(trigger) {
+    const panel = el.colPickerPortal;
+    const rect = trigger.getBoundingClientRect();
+    panel.style.minWidth = Math.max(rect.width, 180) + 'px';
+    panel.style.left = rect.left + 'px';
+    panel.style.top = (rect.bottom + 4) + 'px';
+    const pr = panel.getBoundingClientRect(); // 配置後に実測して画面端のはみ出しを補正
+    let left = rect.left;
+    let top = rect.bottom + 4;
+    if (left + pr.width > window.innerWidth - 8) left = Math.max(8, window.innerWidth - pr.width - 8);
+    if (top + pr.height > window.innerHeight - 8) top = rect.top - pr.height - 4;
+    panel.style.left = left + 'px';
+    panel.style.top = top + 'px';
+  }
+
+  /**
+   * トリガーボタンにパネルを開閉させる。options: [{value, label, type}]
+   * onSelect(value) は項目クリック時に呼ばれる。
+   */
+  function toggleColumnPicker(trigger, options, currentValue, onSelect) {
+    if (trigger.disabled) return;
+    if (activeColPicker && activeColPicker.trigger === trigger) { closeColumnPicker(); return; }
+    closeColumnPicker();
+
+    const panel = el.colPickerPortal;
+    panel.textContent = '';
+    options.forEach(opt => {
+      const item = document.createElement('button');
+      item.type = 'button';
+      item.className = 'col-picker-option';
+      item.setAttribute('role', 'option');
+      const isSelected = opt.value === currentValue;
+      item.setAttribute('aria-selected', String(isSelected));
+      if (isSelected) item.classList.add('selected');
+      if (opt.type) {
+        const badge = document.createElement('em');
+        badge.className = 'col-picker-type type-' + opt.type;
+        badge.textContent = TYPE_LABELS[opt.type] || '';
+        item.appendChild(badge);
+      }
+      const label = document.createElement('span');
+      label.className = 'col-picker-option-label';
+      label.textContent = opt.label;
+      item.appendChild(label);
+      if (isSelected) {
+        const check = document.createElement('span');
+        check.className = 'col-picker-option-check';
+        check.textContent = '✓';
+        item.appendChild(check);
+      }
+      item.addEventListener('click', () => {
+        closeColumnPicker();
+        trigger.focus();
+        onSelect(opt.value);
+      });
+      item.addEventListener('keydown', e => {
+        if (e.key === 'ArrowDown') { e.preventDefault(); (item.nextElementSibling || panel.firstElementChild).focus(); }
+        else if (e.key === 'ArrowUp') { e.preventDefault(); (item.previousElementSibling || panel.lastElementChild).focus(); }
+        else if (e.key === 'Escape') { e.preventDefault(); closeColumnPicker(); trigger.focus(); }
+      });
+      panel.appendChild(item);
+    });
+
+    panel.hidden = false;
+    positionColPickerPanel(trigger);
+    trigger.setAttribute('aria-expanded', 'true');
+    trigger.classList.add('active');
+    activeColPicker = { trigger };
+    const selectedItem = panel.querySelector('.col-picker-option.selected') || panel.firstElementChild;
+    if (selectedItem) selectedItem.focus();
+  }
+
+  /** 一度だけ呼ぶ: パネル外クリック・Escape・スクロール・リサイズで自動的に閉じる */
+  function initColumnPickerGlobalHandlers() {
+    document.addEventListener('mousedown', e => {
+      if (!activeColPicker) return;
+      if (el.colPickerPortal.contains(e.target) || activeColPicker.trigger.contains(e.target)) return;
+      closeColumnPicker();
+    });
+    document.addEventListener('keydown', e => {
+      if (activeColPicker && e.key === 'Escape') { const t = activeColPicker.trigger; closeColumnPicker(); t.focus(); }
+    });
+    window.addEventListener('scroll', () => closeColumnPicker(), true);
+    window.addEventListener('resize', () => closeColumnPicker());
+  }
+
+  /**
+   * ネイティブ select の代替となる列選択リストボックスを1つ生成する。
+   * opts: { options: [{value,label,type}], value, ariaLabel, placeholder, onChange }
+   * 戻り値の要素に setValue(v) / setDisabled(bool) を生やして返す（呼び出し側で
+   * populateXSelect 等が再構築のたびに使う）。
+   */
+  function createColumnPicker(opts) {
+    const options = opts.options || [];
+    let currentValue = opts.value !== undefined ? opts.value : '';
+
+    const wrap = document.createElement('div');
+    wrap.className = 'col-picker';
+
+    const trigger = document.createElement('button');
+    trigger.type = 'button';
+    trigger.className = 'col-picker-trigger';
+    trigger.setAttribute('aria-haspopup', 'listbox');
+    trigger.setAttribute('aria-expanded', 'false');
+    if (opts.ariaLabel) trigger.setAttribute('aria-label', opts.ariaLabel);
+
+    const typeBadge = document.createElement('em');
+    typeBadge.className = 'col-picker-type';
+    const labelEl = document.createElement('span');
+    labelEl.className = 'col-picker-label';
+    const caret = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    caret.setAttribute('class', 'col-picker-caret');
+    caret.setAttribute('width', '11');
+    caret.setAttribute('height', '11');
+    caret.setAttribute('viewBox', '0 0 24 24');
+    caret.setAttribute('fill', 'none');
+    caret.setAttribute('stroke', 'currentColor');
+    caret.setAttribute('stroke-width', '2.5');
+    caret.setAttribute('stroke-linecap', 'round');
+    caret.setAttribute('stroke-linejoin', 'round');
+    caret.setAttribute('aria-hidden', 'true');
+    const caretPath = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
+    caretPath.setAttribute('points', '6 9 12 15 18 9');
+    caret.appendChild(caretPath);
+
+    trigger.append(typeBadge, labelEl, caret);
+    wrap.appendChild(trigger);
+
+    function render() {
+      const found = options.find(o => o.value === currentValue);
+      labelEl.textContent = found ? found.label : (opts.placeholder || '');
+      labelEl.classList.toggle('placeholder', !found);
+      trigger.title = found ? found.label : (opts.placeholder || '');
+      if (found && found.type) {
+        typeBadge.hidden = false;
+        typeBadge.textContent = TYPE_LABELS[found.type] || '';
+        typeBadge.className = 'col-picker-type type-' + found.type;
+      } else {
+        typeBadge.hidden = true;
+      }
+    }
+    render();
+
+    trigger.addEventListener('click', () => {
+      toggleColumnPicker(trigger, options, currentValue, val => {
+        currentValue = val;
+        render();
+        opts.onChange(val);
+      });
+    });
+    trigger.addEventListener('keydown', e => {
+      if (e.key === 'ArrowDown' || e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        if (!activeColPicker || activeColPicker.trigger !== trigger) {
+          toggleColumnPicker(trigger, options, currentValue, val => { currentValue = val; render(); opts.onChange(val); });
+        }
+      }
+    });
+
+    wrap.setValue = v => { currentValue = v; render(); };
+    wrap.getValue = () => currentValue;
+    wrap.setDisabled = disabled => { trigger.disabled = disabled; };
+
+    return wrap;
   }
 
   let toastTimer = null;
@@ -979,18 +1170,28 @@
   // ステップ2: クエリ UI
   // ---------------------------------------------------------------
 
+  let groupByPicker = null;
+
   function populateGroupBySelect() {
-    el.groupBySelect.textContent = '';
-    el.groupBySelect.appendChild(makeOption('', 'なし（行をそのまま使う）'));
     // グループ化はカテゴリ・日付を先に（数値でのグループ化も可能）
     const ordered = [...state.raw.columns].sort((a, b) => {
       const rank = t => (t === 'string' ? 0 : t === 'date' ? 1 : 2);
       return rank(a.type) - rank(b.type);
     });
-    ordered.forEach(c => {
-      el.groupBySelect.appendChild(makeOption(c.name, c.name + '（' + TYPE_LABELS[c.type] + '）'));
+    const options = [{ value: '', label: 'なし（行をそのまま使う）', type: null }]
+      .concat(ordered.map(c => ({ value: c.name, label: c.name, type: c.type })));
+    el.groupBySelect.textContent = '';
+    groupByPicker = createColumnPicker({
+      options,
+      value: state.query.groupBy,
+      ariaLabel: 'グループ化して集計',
+      onChange: val => {
+        state.query.groupBy = val;
+        syncGroupByUI();
+        scheduleUpdate();
+      }
     });
-    el.groupBySelect.value = state.query.groupBy;
+    el.groupBySelect.appendChild(groupByPicker);
     syncGroupByUI();
   }
 
@@ -1002,7 +1203,7 @@
 
   function syncGroupByUI() {
     const grouped = !!state.query.groupBy;
-    el.xSelect.disabled = grouped;
+    if (xPicker) xPicker.setDisabled(grouped);
     el.xHint.hidden = !grouped;
     // 集計セレクトの表示切替は系列リスト再描画で行う
     renderSeriesList();
@@ -1111,13 +1312,20 @@
   // ステップ3: グラフ UI
   // ---------------------------------------------------------------
 
+  let xPicker = null;
+
   function populateXSelect() {
+    const options = [{ value: '', label: '行番号（1, 2, 3, …）', type: null }]
+      .concat(state.raw.columns.map(c => ({ value: c.name, label: c.name, type: c.type })));
     el.xSelect.textContent = '';
-    el.xSelect.appendChild(makeOption('', '行番号（1, 2, 3, …）'));
-    state.raw.columns.forEach(c => {
-      el.xSelect.appendChild(makeOption(c.name, c.name + '（' + TYPE_LABELS[c.type] + '）'));
+    xPicker = createColumnPicker({
+      options,
+      value: state.chart.x,
+      ariaLabel: 'X軸の列',
+      onChange: val => { state.chart.x = val; scheduleUpdate(); }
     });
-    el.xSelect.value = state.chart.x;
+    el.xSelect.appendChild(xPicker);
+    xPicker.setDisabled(!!state.query.groupBy);
   }
 
   function setMode(mode, silent) {
@@ -1219,11 +1427,13 @@
       swatch.style.background = Palette.seriesColor(state.theme, series.slot);
       swatch.title = '系列カラー（' + Palette.SERIES_NAMES[series.slot] + '）';
 
-      const colSel = document.createElement('select');
-      colSel.className = 'grow';
-      colSel.setAttribute('aria-label', '系列の列');
-      nums.forEach(c => colSel.appendChild(makeOption(c.name, c.name)));
-      colSel.value = series.column;
+      const colPicker = createColumnPicker({
+        options: nums.map(c => ({ value: c.name, label: c.name, type: c.type })),
+        value: series.column,
+        ariaLabel: '系列の列',
+        onChange: val => { series.column = val; scheduleUpdate(); }
+      });
+      colPicker.classList.add('grow');
 
       const aggSel = document.createElement('select');
       aggSel.setAttribute('aria-label', '集計方法');
@@ -1245,7 +1455,6 @@
       removeBtn.textContent = '×';
       removeBtn.disabled = state.chart.series.length <= 1;
 
-      colSel.addEventListener('change', () => { series.column = colSel.value; scheduleUpdate(); });
       aggSel.addEventListener('change', () => { series.agg = aggSel.value; scheduleUpdate(); });
       typeSel.addEventListener('change', () => { series.type = typeSel.value; scheduleUpdate(); });
       removeBtn.addEventListener('click', () => {
@@ -1255,7 +1464,17 @@
         scheduleUpdate();
       });
 
-      row.append(handle, swatch, colSel, aggSel, typeSel, reorderBtns, removeBtn);
+      // 列名は独立した行に大きく確保し、集計・種類・並び替えは下段のコンパクトな行にまとめる
+      // （1行に詰め込むと列ピッカーが幅0近くまで潰れ、列名が読めなくなるため）
+      const mainLine = document.createElement('div');
+      mainLine.className = 'series-row-main';
+      mainLine.append(handle, swatch, colPicker, removeBtn);
+
+      const subLine = document.createElement('div');
+      subLine.className = 'series-row-sub';
+      subLine.append(aggSel, typeSel, reorderBtns);
+
+      row.append(mainLine, subLine);
       el.seriesList.appendChild(row);
     });
 
@@ -1283,11 +1502,13 @@
       swatch.className = 'swatch';
       swatch.style.background = Palette.seriesColor(state.theme, series.slot);
 
-      const colSel = document.createElement('select');
-      colSel.className = 'grow';
-      colSel.setAttribute('aria-label', '対象の列');
-      nums.forEach(c => colSel.appendChild(makeOption(c.name, c.name)));
-      colSel.value = series.column;
+      const colPicker = createColumnPicker({
+        options: nums.map(c => ({ value: c.name, label: c.name, type: c.type })),
+        value: series.column,
+        ariaLabel: '対象の列',
+        onChange: val => { series.column = val; scheduleUpdate(); }
+      });
+      colPicker.classList.add('grow');
 
       const reorderBtns = createReorderButtons(idx, total);
 
@@ -1298,7 +1519,6 @@
       removeBtn.textContent = '×';
       removeBtn.disabled = state.chart.series.length <= 1;
 
-      colSel.addEventListener('change', () => { series.column = colSel.value; scheduleUpdate(); });
       removeBtn.addEventListener('click', () => {
         state.chart.series.splice(idx, 1);
         renderSeriesList();
@@ -1306,7 +1526,10 @@
         scheduleUpdate();
       });
 
-      row.append(handle, swatch, colSel, reorderBtns, removeBtn);
+      const mainLine = document.createElement('div');
+      mainLine.className = 'series-row-main';
+      mainLine.append(handle, swatch, colPicker, reorderBtns, removeBtn);
+      row.appendChild(mainLine);
       el.histSeriesList.appendChild(row);
     });
 
@@ -1345,7 +1568,7 @@
   /** X軸に列を割り当てる（列チップのドロップ・生データマトリクスからの割り当てで共用） */
   function setXAxisColumn(column) {
     state.chart.x = column;
-    el.xSelect.value = column;
+    if (xPicker) xPicker.setValue(column);
     scheduleUpdate();
     showToast('success', 'X軸を「' + column + '」に設定しました');
   }
@@ -2250,7 +2473,7 @@
       numericOnly: false,
       onDrop: column => {
         state.query.groupBy = column;
-        el.groupBySelect.value = column;
+        if (groupByPicker) groupByPicker.setValue(column);
         syncGroupByUI();
         scheduleUpdate();
         showToast('success', '「' + column + '」でグループ化しました');
@@ -2291,17 +2514,13 @@
     });
     initMatrixEvents();
     initChartZoom();
+    initColumnPickerGlobalHandlers();
 
     // クエリ
     el.addFilterBtn.addEventListener('click', () => {
       const first = state.raw.columns.find(c => c.type === 'string') || state.raw.columns[0];
       state.query.filters.push({ column: first.name, op: QueryEngine.opsFor(first.type)[0].id, value: '' });
       renderFilters();
-    });
-    el.groupBySelect.addEventListener('change', () => {
-      state.query.groupBy = el.groupBySelect.value;
-      syncGroupByUI();
-      scheduleUpdate();
     });
     el.sortSelect.addEventListener('change', () => { state.query.sort = el.sortSelect.value; scheduleUpdate(); });
     el.limitInput.addEventListener('input', () => {
@@ -2326,7 +2545,6 @@
     el.modeSegment.querySelectorAll('button').forEach(btn => {
       btn.addEventListener('click', () => setMode(btn.dataset.mode, false));
     });
-    el.xSelect.addEventListener('change', () => { state.chart.x = el.xSelect.value; scheduleUpdate(); });
     el.addSeriesBtn.addEventListener('click', () => addSeries());
     el.addHistSeriesBtn.addEventListener('click', () => addSeries());
     el.stackedToggle.addEventListener('change', () => { state.chart.stacked = el.stackedToggle.checked; scheduleUpdate(); });
