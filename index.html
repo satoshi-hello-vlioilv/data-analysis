@@ -3,423 +3,289 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="description" content="CSVやExcelファイルからヒストグラムを簡単に作成・分析できるビジネス向けツールです。管理限界線機能付き。">
-  <title>ヒストグラム分析ツール</title>
+  <meta name="description" content="CSVやExcelファイルから棒・折れ線・面・散布図・ヒストグラムを自由に組み合わせて作成できる汎用グラフ作成ツール。フィルタ・グループ化・集計をクエリとして可視化します。">
+  <title>グラフ作成スタジオ — 汎用データ可視化ツール</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%232a78d6' stroke-width='2' stroke-linecap='round'%3E%3Cline x1='18' y1='20' x2='18' y2='10'/%3E%3Cline x1='12' y1='20' x2='12' y2='4'/%3E%3Cline x1='6' y1='20' x2='6' y2='14'/%3E%3Cpath d='M3 20h18'/%3E%3C/svg%3E">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <header>
-    <div class="app-title">
-      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
-        <line x1="3" y1="9" x2="21" y2="9"></line>
-        <line x1="9" y1="21" x2="9" y2="9"></line>
-      </svg>
-      ヒストグラム分析ツール
-    </div>
-    <p class="app-subtitle">CSVデータからヒストグラムを作成・管理限界線で分析</p>
-  </header>
+  <div class="app">
+    <header class="app-header">
+      <div class="brand">
+        <svg class="brand-mark" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <line x1="18" y1="20" x2="18" y2="10"></line>
+          <line x1="12" y1="20" x2="12" y2="4"></line>
+          <line x1="6" y1="20" x2="6" y2="14"></line>
+          <path d="M3 20h18"></path>
+        </svg>
+        <div class="brand-text">
+          <h1>グラフ作成スタジオ</h1>
+          <p>CSV・Excel からグラフを作成・分析できる汎用可視化ツール</p>
+        </div>
+      </div>
+      <button type="button" class="icon-btn" id="themeToggle" aria-label="ライト / ダークテーマを切り替え" title="テーマ切替">
+        <svg class="icon-sun" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="5"></circle>
+          <line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line>
+          <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+          <line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line>
+          <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+        </svg>
+        <svg class="icon-moon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+        </svg>
+      </button>
+    </header>
 
-  <div class="container">
-    <div class="main-content">
-      <aside class="panel control-panel">
-        <h2 class="section-title">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M4 22h14a2 2 0 0 0 2-2V7.5L14.5 2H6a2 2 0 0 0-2 2v4"></path>
-            <polyline points="14 2 14 8 20 8"></polyline>
-            <path d="M3 15h6"></path>
-            <path d="M3 18h6"></path>
-            <path d="M3 12h6"></path>
-          </svg>
-          データ入力
-        </h2>
+    <div class="layout">
+      <!-- ============ 左: コントロールパネル ============ -->
+      <aside class="sidebar">
 
-        <div id="alert-container"></div>
-        
-        <div class="drop-area" id="dropArea">
-          <div class="drop-area-icon">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <!-- ステップ1: データ -->
+        <section class="step" aria-labelledby="stepDataTitle">
+          <header class="step-header">
+            <span class="step-no" aria-hidden="true">1</span>
+            <h2 id="stepDataTitle">データ</h2>
+          </header>
+
+          <p class="step-hint">サンプルで試すか、手元のファイルを読み込みます</p>
+          <div class="sample-grid" id="sampleGrid"></div>
+
+          <div class="drop-area" id="dropArea" role="button" tabindex="0" aria-label="CSVまたはExcelファイルを選択（ドラッグ＆ドロップ対応）">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
               <polyline points="17 8 12 3 7 8"></polyline>
               <line x1="12" y1="3" x2="12" y2="15"></line>
             </svg>
+            <div>
+              <strong>ファイルをドロップ / クリックして選択</strong>
+              <small>CSV・TSV・XLSX・XLS に対応</small>
+            </div>
+            <input type="file" id="fileInput" accept=".csv,.tsv,.txt,.xls,.xlsx" hidden>
           </div>
-          <div class="drop-area-text">CSVファイルまたはExcelファイルをドラッグ＆ドロップ<br>または クリックして選択</div>
-          <p class="drop-area-subtext">数値データを含むCSV, XLS, XLSXファイルをアップロード</p>
-          <input type="file" id="fileInput" accept=".csv,.xls,.xlsx" aria-label="CSVまたはExcelファイルをアップロード">
-        </div>
 
-        <div class="file-info" id="fileInfo">
-          <div class="file-info-icon">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <div class="file-info" id="fileInfo" hidden>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
               <polyline points="14 2 14 8 20 8"></polyline>
-              <line x1="16" y1="13" x2="8" y2="13"></line>
-              <line x1="16" y1="17" x2="8" y2="17"></line>
-              <polyline points="10 9 9 9 8 9"></polyline>
             </svg>
-          </div>
-          <div class="file-info-content">
-            <div class="file-info-name" id="fileName"></div>
-            <div class="file-info-size" id="fileSize"></div>
-          </div>
-          <button type="button" class="file-info-remove" id="removeFile" aria-label="ファイルを削除">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <line x1="18" y1="6" x2="6" y2="18"></line>
-              <line x1="6" y1="6" x2="18" y2="18"></line>
-            </svg>
-          </button>
-        </div>
-
-        <div id="histogramControls" style="display: none;">
-          <h2 class="section-title" style="margin-top: var(--spacing-sm);">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <circle cx="12" cy="12" r="3"></circle>
-              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
-            </svg>
-            ヒストグラム設定
-          </h2>
-
-          <button type="button" id="generateBtn" class="btn" style="margin-bottom: var(--spacing-md); width: 100%;" disabled="">
-            <svg class="btn-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
-            </svg>
-            ヒストグラム生成
-          </button>
-
-          <div class="form-group">
-            <label for="dataColumn">分析する列</label>
-            <select id="dataColumn" class="form-control" aria-describedby="columnDesc">
-              <option value="">CSV取り込み後に選択可能になります</option>
-            </select>
-            <small id="columnDesc">ヒストグラムを生成する数値データの列を選択</small>
-          </div>
-
-          <div class="form-group">
-            <label for="binMethod">階級の設定方法</label>
-            <select id="binMethod" class="form-control" aria-describedby="binMethodDesc">
-              <option value="sturges">スタージェスの公式</option>
-              <option value="scott">スコットの方法</option>
-              <option value="freedman">フリードマン-ダイアコニス</option>
-              <option value="custom">カスタム</option>
-            </select>
-            <small id="binMethodDesc">データ分布に適した階級設定方法を選択</small>
-            <div class="bin-method-info">
-              <p><strong>スタージェスの公式</strong>: 一般的な用途に適した基本的な方法。階級数 = log₂(データ数) + 1</p>
-              <p><strong>スコットの方法</strong>: 正規分布に近いデータに最適。標準偏差と平方根に基づく</p>
-              <p><strong>フリードマン-ダイアコニス</strong>: 外れ値が多いデータに強い。四分位範囲を利用</p>
-              <p><strong>カスタム</strong>: 階級数を自分で指定</p>
+            <div class="file-info-text">
+              <span id="fileInfoName"></span>
+              <small id="fileInfoDetail"></small>
             </div>
-          </div>
-
-          <div class="form-group" id="customBinSettings" style="display: none;">
-            <label for="binCount">階級数</label>
-            <div style="display: flex; align-items: center; gap: 10px;">
-              <input type="range" id="binCount" min="2" max="1000" value="10" class="form-control">
-              <span id="binCountValue">10</span>
-            </div>
-          </div>
-
-          <!-- 管理限界線設定 -->
-          <div class="control-limits-group">
-            <div class="control-limits-title">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <line x1="3" y1="12" x2="21" y2="12"></line>
-                <line x1="3" y1="6" x2="21" y2="6"></line>
-                <line x1="3" y1="18" x2="21" y2="18"></line>
+            <button type="button" class="icon-btn sm" id="removeFileBtn" aria-label="データを削除">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line>
               </svg>
-              管理限界線設定
-            </div>
-            
-            <div class="limit-row">
-              <label for="clValue" title="中心線 (Center Line)">CL</label>
-              <input type="number" id="clValue" class="form-control" placeholder="平均値を自動設定" step="any">
-              <button type="button" id="resetCL" class="btn btn-sm" title="平均値にリセット">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M3 2v6h6"></path>
-                  <path d="M3 13a9 9 0 1 0 3-7.7L3 8"></path>
-                </svg>
-              </button>
-            </div>
-            
-            <div class="limit-row">
-              <label for="uclValue" title="上側管理限界 (Upper Control Limit)">UCL</label>
-              <input type="number" id="uclValue" class="form-control" placeholder="CL + 3σ" step="any">
-              <button type="button" id="resetUCL" class="btn btn-sm" title="+3σにリセット">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M3 2v6h6"></path>
-                  <path d="M3 13a9 9 0 1 0 3-7.7L3 8"></path>
-                </svg>
-              </button>
-            </div>
-            
-            <div class="limit-row">
-              <label for="lclValue" title="下側管理限界 (Lower Control Limit)">LCL</label>
-              <input type="number" id="lclValue" class="form-control" placeholder="CL - 3σ" step="any">
-              <button type="button" id="resetLCL" class="btn btn-sm" title="-3σにリセット">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M3 2v6h6"></path>
-                  <path d="M3 13a9 9 0 1 0 3-7.7L3 8"></path>
-                </svg>
-              </button>
-            </div>
-            
-            <div class="show-sigma-lines">
-              <span class="switch-label">3σラインを表示</span>
-              <label class="toggle-switch">
-                <input type="checkbox" id="showSigmaLines">
-                <span class="toggle-slider"></span>
-              </label>
-            </div>
-            
-            <p class="control-limits-info">管理限界線はプロセスの安定性を示します。通常、CL±3σの範囲内にデータが約99.7%含まれます。範囲外のデータは特殊原因と見なせます。</p>
+            </button>
           </div>
 
-          <!-- X軸表示範囲コントロール -->
-          <div class="form-group">
-            <label for="xAxisZoom">表示範囲ズーム <span id="xAxisZoomValue">1</span>倍</label>
-            <input type="range" id="xAxisZoom" min="0.01" max="10.00" value="1" step="0.01" class="form-control">
-            <small id="xAxisZoomDesc">スライダーを動かして表示範囲を調整（1〜10倍）</small>
+          <div class="column-summary" id="columnSummary" hidden>
+            <span class="column-summary-title">検出した列（ヘッダー抽出済み）</span>
+            <div class="column-chips" id="columnChips"></div>
+          </div>
+        </section>
+
+        <!-- ステップ2: データ処理（クエリ） -->
+        <section class="step" id="stepQuery" aria-labelledby="stepQueryTitle" hidden>
+          <header class="step-header">
+            <span class="step-no" aria-hidden="true">2</span>
+            <h2 id="stepQueryTitle">データ処理</h2>
+          </header>
+
+          <div class="field">
+            <label>フィルタ</label>
+            <div class="filter-list" id="filterList"></div>
+            <button type="button" class="btn ghost sm" id="addFilterBtn">＋ フィルタを追加</button>
           </div>
 
-          <!-- X軸MIN/MAX範囲コントロール -->
-          <div class="form-group">
-            <label>X軸表示範囲調整</label>
-            <div class="range-slider-container">
-              <div class="range-label">最小値: <span id="minRangeValue">-</span></div>
-              <div class="dual-range-slider">
-                <input type="range" id="minRangeSlider" class="form-control range-slider" min="0" max="100" value="0">
-                <input type="range" id="maxRangeSlider" class="form-control range-slider" min="0" max="100" value="100">
-                <div class="range-slider-track"></div>
-              </div>
-              <div class="range-label">最大値: <span id="maxRangeValue">-</span></div>
+          <div class="field">
+            <label for="groupBySelect">グループ化して集計</label>
+            <select id="groupBySelect"></select>
+          </div>
+
+          <div class="field-row">
+            <div class="field">
+              <label for="sortSelect">並び替え</label>
+              <select id="sortSelect"></select>
             </div>
-            <small>スライダーを動かして表示する値の範囲を調整</small>
+            <div class="field">
+              <label for="limitInput">行数上限</label>
+              <input type="number" id="limitInput" min="1" step="1" placeholder="すべて" inputmode="numeric">
+            </div>
           </div>
 
-          <div class="form-group">
-            <label for="colorScheme">カラースキーム</label>
-            <select id="colorScheme" class="form-control" aria-describedby="colorSchemeDesc">
-              <option value="blue">ブルートーン（業務標準）</option>
-              <option value="green">グリーントーン（成長・実績）</option>
-              <option value="purple">パープルトーン（革新・創造）</option>
-              <option value="orange">オレンジトーン（活力・行動）</option>
-            </select>
-            <small id="colorSchemeDesc">目的やブランドに合わせた色調を選択</small>
+          <div class="query-preview">
+            <div class="query-preview-head">
+              <span>クエリ（処理内容の写し）</span>
+              <button type="button" class="btn ghost sm" id="copyQueryBtn">コピー</button>
+            </div>
+            <pre><code id="queryCode"></code></pre>
           </div>
-        </div>
-        
-        <!-- フィルタ設定 -->
-        <div id="filterControls" style="display: none;">
-          <h2 class="section-title" style="margin-top: var(--spacing-sm);">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
-            </svg>
-            データフィルタ
-          </h2>
-          <div class="filter-description">分析軸以外の列でデータをフィルタリングできます</div>
-          <div id="filterContainer"></div>
-          <button type="button" id="applyFilterBtn" class="btn btn-secondary" style="margin-top: var(--spacing-md); width: 100%;">
-            <svg class="btn-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
-            </svg>
-            フィルタを適用
-          </button>
-        </div>
+        </section>
+
+        <!-- ステップ3: グラフ -->
+        <section class="step" id="stepChart" aria-labelledby="stepChartTitle" hidden>
+          <header class="step-header">
+            <span class="step-no" aria-hidden="true">3</span>
+            <h2 id="stepChartTitle">グラフ</h2>
+          </header>
+
+          <div class="segmented" role="group" aria-label="グラフモード" id="modeSegment">
+            <button type="button" data-mode="xy" class="active" aria-pressed="true">XYグラフ</button>
+            <button type="button" data-mode="hist" aria-pressed="false">ヒストグラム</button>
+          </div>
+
+          <div id="xySettings">
+            <div class="field">
+              <label for="xSelect">X軸の列</label>
+              <select id="xSelect"></select>
+              <small id="xHint" hidden>グループ化中はグループ列がX軸になります</small>
+            </div>
+            <div class="field">
+              <label>系列（Y軸の列 / 種類を混在可・最大8）</label>
+              <div class="series-list" id="seriesList"></div>
+              <button type="button" class="btn ghost sm" id="addSeriesBtn">＋ 系列を追加</button>
+            </div>
+            <label class="toggle-row">
+              <span>積み上げ表示（棒・面）</span>
+              <input type="checkbox" id="stackedToggle" class="switch">
+            </label>
+          </div>
+
+          <div id="histSettings" hidden>
+            <div class="field">
+              <label>対象列（数値・重ねて比較可）</label>
+              <div class="series-list" id="histSeriesList"></div>
+              <button type="button" class="btn ghost sm" id="addHistSeriesBtn">＋ 列を追加</button>
+            </div>
+            <div class="field">
+              <label for="binMethodSelect">階級の決め方</label>
+              <select id="binMethodSelect">
+                <option value="sturges">スタージェスの公式（標準）</option>
+                <option value="scott">スコットの方法（正規分布向き）</option>
+                <option value="freedman">フリードマン・ダイアコニス（外れ値に強い）</option>
+                <option value="custom">カスタム（階級数を指定）</option>
+              </select>
+            </div>
+            <div class="field" id="binCountField" hidden>
+              <label for="binCountRange">階級数: <output id="binCountOut">10</output></label>
+              <input type="range" id="binCountRange" min="2" max="100" value="10">
+            </div>
+            <label class="toggle-row">
+              <span>正規分布カーブを重ねる</span>
+              <input type="checkbox" id="normalCurveToggle" class="switch">
+            </label>
+          </div>
+
+          <div class="field">
+            <label>基準線（平均・管理限界など）</label>
+            <div class="reflines" id="refLineList"></div>
+            <div class="quick-refs" id="quickRefs">
+              <button type="button" class="chip-btn" data-ref="mean">平均</button>
+              <button type="button" class="chip-btn" data-ref="median">中央値</button>
+              <button type="button" class="chip-btn" data-ref="p3s">＋3σ</button>
+              <button type="button" class="chip-btn" data-ref="m3s">−3σ</button>
+              <button type="button" class="chip-btn" data-ref="custom">＋ 任意の値</button>
+            </div>
+            <small>最初の系列の値から計算されます。値は後から編集できます</small>
+          </div>
+        </section>
       </aside>
 
-      <main class="panel visualization-panel">
-        <div class="visualization-header">
-          <h2 class="section-title" style="margin-bottom: 0;">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
-            </svg>
-            <span id="visualizationTitle">データ可視化</span>
-          </h2>
-          
-          <div class="btn-group" id="chartControls" style="display: none;">
-            <button type="button" class="btn" id="downloadBtn">
-              <svg class="btn-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <!-- ============ 右: 可視化エリア ============ -->
+      <main class="content">
+        <div class="content-toolbar" id="contentToolbar" hidden>
+          <div class="tabs" role="tablist" aria-label="表示切替">
+            <button type="button" class="tab active" role="tab" aria-selected="true" data-view="chart">グラフ</button>
+            <button type="button" class="tab" role="tab" aria-selected="false" data-view="table">テーブル</button>
+            <button type="button" class="tab" role="tab" aria-selected="false" data-view="stats">統計</button>
+          </div>
+          <div class="toolbar-actions">
+            <button type="button" class="btn ghost sm" id="downloadPngBtn">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                 <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                <polyline points="7 10 12 15 17 10"></polyline>
-                <line x1="12" y1="15" x2="12" y2="3"></line>
+                <polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line>
               </svg>
-              画像ダウンロード
+              PNG保存
             </button>
-            <button type="button" class="btn btn-secondary" id="exportBtn">
-              <svg class="btn-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                <polyline points="7 10 12 15 17 10"></polyline>
-                <line x1="12" y1="15" x2="12" y2="3"></line>
+            <button type="button" class="btn ghost sm" id="exportCsvBtn">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                <polyline points="14 2 14 8 20 8"></polyline>
               </svg>
-              データエクスポート
+              CSV出力
             </button>
           </div>
         </div>
 
-        <div class="visualization-content">
-          <div class="histogram-container">
-            <div class="placeholder" id="placeholder">
-              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
-              </svg>
-              <p style="width: 100%;">CSVファイルをアップロードして、<br>ヒストグラムを生成してください</p>
-            </div>
-            <div id="histogram"></div>
-            <div class="loading" id="loading" style="display: none;">
-              <div class="loading-spinner"></div>
-              <p style="margin-top: 10px;">処理中...</p>
-            </div>
-          </div>
-
-          <div class="statistics-container" id="statisticsContainer">
-            <div id="distributionInfo" style="display: none;">
-              <div class="distribution-type" id="distributionType">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M2 12h4l3 8 3-16 3 8h4"></path>
-                </svg>
-                <span id="distributionTypeText">正規分布に近い</span>
-              </div>
-
-              <div class="data-summary">
-                <div class="stat-card">
-                  <div class="stat-icon">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                      <path d="M20 6L9 17l-5-5"></path>
-                    </svg>
-                  </div>
-                  <div class="stat-content">
-                    <div class="stat-title">データ数</div>
-                    <div class="stat-value" id="dataCount">-</div>
-                  </div>
-                </div>
-                <div class="stat-card">
-                  <div class="stat-icon">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                      <line x1="18" y1="20" x2="18" y2="10"></line>
-                      <line x1="12" y1="20" x2="12" y2="4"></line>
-                      <line x1="6" y1="20" x2="6" y2="14"></line>
-                    </svg>
-                  </div>
-                  <div class="stat-content">
-                    <div class="stat-title">平均値</div>
-                    <div class="stat-value" id="mean">-</div>
-                  </div>
-                </div>
-                <div class="stat-card">
-                  <div class="stat-icon">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                      <line x1="8" y1="6" x2="21" y2="6"></line>
-                      <line x1="8" y1="12" x2="21" y2="12"></line>
-                      <line x1="8" y1="18" x2="21" y2="18"></line>
-                      <line x1="3" y1="6" x2="3.01" y2="6"></line>
-                      <line x1="3" y1="12" x2="3.01" y2="12"></line>
-                      <line x1="3" y1="18" x2="3.01" y2="18"></line>
-                    </svg>
-                  </div>
-                  <div class="stat-content">
-                    <div class="stat-title">中央値</div>
-                    <div class="stat-value" id="median">-</div>
-                  </div>
-                </div>
-                <div class="stat-card">
-                  <div class="stat-icon">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                      <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"></path>
-                      <line x1="4" y1="22" x2="4" y2="15"></line>
-                    </svg>
-                  </div>
-                  <div class="stat-content">
-                    <div class="stat-title">標準偏差</div>
-                    <div class="stat-value" id="stdDev">-</div>
-                  </div>
-                </div>
-                <div class="stat-card">
-                  <div class="stat-icon">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                      <polyline points="4 14 10 14 10 20"></polyline>
-                      <polyline points="20 10 14 10 14 4"></polyline>
-                      <line x1="14" y1="10" x2="21" y2="3"></line>
-                      <line x1="3" y1="21" x2="10" y2="14"></line>
-                    </svg>
-                  </div>
-                  <div class="stat-content">
-                    <div class="stat-title">最小値</div>
-                    <div class="stat-value" id="minValue">-</div>
-                  </div>
-                </div>
-                <div class="stat-card">
-                  <div class="stat-icon">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                      <polyline points="20 10 14 10 14 4"></polyline>
-                      <polyline points="4 14 10 14 10 20"></polyline>
-                      <line x1="14" y1="10" x2="21" y2="3"></line>
-                      <line x1="3" y1="21" x2="10" y2="14"></line>
-                    </svg>
-                  </div>
-                  <div class="stat-content">
-                    <div class="stat-title">最大値</div>
-                    <div class="stat-value" id="maxValue">-</div>
-                  </div>
-                </div>
-                <div class="stat-card">
-                  <div class="stat-icon">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                      <path d="M3 18v-6a9 9 0 0 1 18 0v6"></path>
-                      <path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"></path>
-                    </svg>
-                  </div>
-                  <div class="stat-content">
-                    <div class="stat-title">尖度</div>
-                    <div class="stat-value" id="kurtosis">-</div>
-                  </div>
-                </div>
-                <div class="stat-card">
-                  <div class="stat-icon">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                      <path d="M2 12h4l3 8 3-16 3 8h4"></path>
-                    </svg>
-                  </div>
-                  <div class="stat-content">
-                    <div class="stat-title">歪度</div>
-                    <div class="stat-value" id="skewness">-</div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
+        <!-- 空の状態 -->
+        <div class="empty-state" id="emptyState">
+          <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <line x1="18" y1="20" x2="18" y2="10"></line>
+            <line x1="12" y1="20" x2="12" y2="4"></line>
+            <line x1="6" y1="20" x2="6" y2="14"></line>
+            <path d="M3 20h18"></path>
+          </svg>
+          <h2>データを読み込んでグラフを作成</h2>
+          <p>左のパネルからファイルを読み込むか、サンプルデータですぐに試せます。<br>棒・折れ線・面・散布図を混在させたグラフや、ヒストグラム分析が可能です。</p>
+          <div class="sample-grid wide" id="emptySampleGrid"></div>
         </div>
+
+        <!-- グラフビュー -->
+        <figure class="card chart-card" id="chartCard" hidden>
+          <figcaption class="card-head">
+            <h3 id="chartTitle">グラフ</h3>
+            <p class="chart-meta" id="chartMeta"></p>
+          </figcaption>
+          <div class="chart-body">
+            <canvas id="chartCanvas" role="img" aria-label="グラフ。同じ内容はテーブルタブで表として確認できます"></canvas>
+            <p class="chart-notice" id="chartNotice" hidden></p>
+          </div>
+        </figure>
+
+        <!-- テーブルビュー（グラフと同じ内容の表 = アクセシブルな等価表示） -->
+        <section class="card table-card" id="tableCard" hidden aria-label="データテーブル">
+          <div class="card-head">
+            <h3>テーブル</h3>
+            <p class="chart-meta" id="tableNote"></p>
+          </div>
+          <div class="table-scroll" tabindex="0">
+            <table id="dataTable"></table>
+          </div>
+        </section>
+
+        <!-- 統計ビュー -->
+        <section class="card stats-card" id="statsCard" hidden aria-label="統計情報">
+          <div class="card-head">
+            <h3>統計</h3>
+            <p class="chart-meta" id="statsNote"></p>
+          </div>
+          <div id="statsContent"></div>
+        </section>
       </main>
     </div>
+
+    <footer class="app-footer">
+      <p>グラフ作成スタジオ — データはすべてブラウザ内で処理され、外部には送信されません</p>
+    </footer>
   </div>
 
-  <div class="tooltip" id="tooltip"></div>
-    
-  <div class="notification" id="notification">
-    <div class="notification-icon">
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
-        <polyline points="22 4 12 14.01 9 11.01"></polyline>
-      </svg>
-    </div>
-    <div class="notification-content">
-      <div class="notification-title" id="notificationTitle"></div>
-      <div class="notification-message" id="notificationMessage"></div>
-    </div>
+  <div class="toast" id="toast" role="status" aria-live="polite" hidden>
+    <span class="toast-icon" id="toastIcon" aria-hidden="true"></span>
+    <span id="toastMessage"></span>
   </div>
 
-  <footer>
-    <p>© 2025 ビジネス向けヒストグラム分析ツール | プライバシーポリシー | 利用規約</p>
-  </footer>
+  <!-- ライブラリ（同梱 — オフラインでも動作） -->
+  <script src="vendor/chart.umd.min.js"></script>
+  <script src="vendor/papaparse.min.js"></script>
+  <script src="vendor/xlsx.full.min.js"></script>
 
-  <!-- Chart.jsライブラリ -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
-  <!-- Chart.jsアノテーションプラグイン - 管理限界線表示用 -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/chartjs-plugin-annotation/2.1.0/chartjs-plugin-annotation.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
-  <!-- SheetJS - Excelファイル処理用 -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-  
-  <script src="script.js"></script>
+  <!-- アプリケーション -->
+  <script src="js/palette.js"></script>
+  <script src="js/data.js"></script>
+  <script src="js/query.js"></script>
+  <script src="js/charts.js"></script>
+  <script src="js/app.js"></script>
 </body>
 </html>
