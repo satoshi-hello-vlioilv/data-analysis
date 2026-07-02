@@ -252,8 +252,7 @@ button { font-family: inherit; }
 }
 
 .sample-grid.wide {
-  max-width: 560px;
-  margin: 20px auto 0;
+  margin: 0;
 }
 
 .sample-card {
@@ -324,6 +323,44 @@ button { font-family: inherit; }
   white-space: nowrap;
 }
 .file-info-text small { font-size: 11px; color: var(--text-secondary); }
+
+/* --- ヒントカード（データ未読込時、サイドバーの余白を使って機能を予告） --- */
+
+.tips-card {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px dashed var(--border);
+}
+
+.tips-card h4 {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 8px;
+}
+
+.tips-card ul { display: flex; flex-direction: column; gap: 7px; }
+
+.tips-card li {
+  position: relative;
+  padding-left: 15px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+}
+
+.tips-card li::before {
+  content: "";
+  position: absolute;
+  left: 2px;
+  top: 7px;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--accent);
+}
 
 /* --- 列チップ（型付き） --- */
 
@@ -1146,20 +1183,127 @@ body.dnd-column-active .drop-zone.drop-reject {
 
 .stats-empty { padding: 8px 0 4px; color: var(--muted); }
 
-/* 空の状態 */
+/* 空の状態（導入画面） */
 .empty-state {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow);
-  padding: 56px 28px;
-  text-align: center;
+  padding: 36px 32px;
   color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
-.empty-state svg { color: var(--axis); margin-bottom: 14px; }
-.empty-state h2 { font-size: 17px; font-weight: 700; color: var(--text-primary); margin-bottom: 8px; }
-.empty-state p { font-size: 13px; line-height: 1.8; }
+.empty-state-inner {
+  width: 100%;
+  max-width: 900px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+}
+
+/* --- ヒーロー（アイコン＋見出し） --- */
+
+.empty-hero {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+
+.empty-hero-icon {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 60px;
+  height: 60px;
+  color: var(--accent);
+  background: var(--accent-wash);
+  border-radius: var(--radius-lg);
+}
+
+.empty-hero-text h2 { font-size: 18px; font-weight: 700; color: var(--text-primary); margin-bottom: 5px; }
+.empty-hero-text p { font-size: 13px; line-height: 1.7; }
+
+/* --- 3ステップの流れ（サイドバーのステッパーと視覚的に対応） --- */
+
+.flow-guide {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 18px 22px;
+  background: var(--accent-wash);
+  border-radius: var(--radius-lg);
+  list-style: none;
+  margin: 0;
+}
+
+.flow-step { display: flex; align-items: center; gap: 10px; text-align: left; }
+
+.flow-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  font-size: 12.5px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.flow-step strong { display: block; font-size: 12.5px; font-weight: 700; color: var(--text-primary); }
+.flow-step small { font-size: 11px; color: var(--text-secondary); }
+
+.flow-arrow { color: var(--muted); font-size: 15px; flex-shrink: 0; }
+
+/* --- セクション見出し --- */
+
+.empty-section-title {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 10px;
+  text-align: left;
+}
+
+/* --- 対応グラフの種類ショーケース --- */
+
+.chart-type-row {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.chart-type-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 7px;
+  flex: 1;
+  min-width: 84px;
+  padding: 14px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  color: var(--accent);
+}
+
+.chart-type-item span { font-size: 11px; font-weight: 600; color: var(--text-primary); }
+
+@media (max-width: 640px) {
+  .empty-hero { flex-direction: column; text-align: center; }
+  .flow-guide { flex-direction: column; align-items: stretch; }
+  .flow-arrow { display: none; }
+}
 
 /* ==========================================================================
    トースト通知（ステータス色はアイコン＋テキストと必ず併用）
@@ -1262,13 +1406,17 @@ body.dnd-column-active .drop-zone.drop-reject {
   }
 
   /* グラフ／テーブル／統計カードは content の残り高さいっぱいに広がり、
-     内部（グラフ本体・テーブル・統計表）だけが必要に応じてスクロールする */
-  .content > .card {
+     内部（グラフ本体・テーブル・統計表）だけが必要に応じてスクロールする。
+     導入画面（空の状態）も同様に残り高さを使い、内容を中央に配置する */
+  .content > .card,
+  .content > .empty-state {
     flex: 1;
     min-height: 0;
     display: flex;
     flex-direction: column;
   }
+
+  .content > .empty-state { overflow-y: auto; }
 
   .chart-card .chart-body {
     flex: 1;

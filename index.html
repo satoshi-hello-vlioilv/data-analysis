@@ -119,6 +119,17 @@
               </div>
             </div>
           </details>
+
+          <div class="tips-card" id="onboardTips">
+            <h4>できること</h4>
+            <ul>
+              <li>棒・折れ線・面・散布図を1つのグラフに混在表示</li>
+              <li>列をドラッグしてX軸・系列に直接割り当て</li>
+              <li>フィルタ・グループ化・並び替えをクエリとして確認</li>
+              <li>ヘッダー行やデータ開始行を自動検出＋手動調整</li>
+              <li>グラフはPNG、データはCSVで書き出し</li>
+            </ul>
+          </div>
         </section>
 
         <!-- ステップ2: データ処理（クエリ） -->
@@ -362,17 +373,76 @@
           </div>
         </div>
 
-        <!-- 空の状態 -->
+        <!-- 空の状態（導入画面） -->
         <div class="empty-state" id="emptyState">
-          <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <line x1="18" y1="20" x2="18" y2="10"></line>
-            <line x1="12" y1="20" x2="12" y2="4"></line>
-            <line x1="6" y1="20" x2="6" y2="14"></line>
-            <path d="M3 20h18"></path>
-          </svg>
-          <h2>データを読み込んでグラフを作成</h2>
-          <p>左のパネルからファイルを読み込むか、サンプルデータですぐに試せます。<br>棒・折れ線・面・散布図を混在させたグラフや、ヒストグラム分析が可能です。</p>
-          <div class="sample-grid wide" id="emptySampleGrid"></div>
+          <div class="empty-state-inner">
+            <div class="empty-hero">
+              <div class="empty-hero-icon">
+                <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <line x1="18" y1="20" x2="18" y2="10"></line>
+                  <line x1="12" y1="20" x2="12" y2="4"></line>
+                  <line x1="6" y1="20" x2="6" y2="14"></line>
+                  <path d="M3 20h18"></path>
+                </svg>
+              </div>
+              <div class="empty-hero-text">
+                <h2>データを読み込んでグラフを作成</h2>
+                <p>左のパネルからファイルを読み込むか、サンプルデータですぐに試せます。</p>
+              </div>
+            </div>
+
+            <ol class="flow-guide">
+              <li class="flow-step">
+                <span class="flow-num">1</span>
+                <div><strong>データを選ぶ</strong><small>サンプル4種、またはCSV・Excelを読み込み</small></div>
+              </li>
+              <li class="flow-arrow" aria-hidden="true">→</li>
+              <li class="flow-step">
+                <span class="flow-num">2</span>
+                <div><strong>処理を調整</strong><small>フィルタ・グループ化・並び替え</small></div>
+              </li>
+              <li class="flow-arrow" aria-hidden="true">→</li>
+              <li class="flow-step">
+                <span class="flow-num">3</span>
+                <div><strong>グラフを仕上げる</strong><small>種類の混在・軸範囲・基準線</small></div>
+              </li>
+            </ol>
+
+            <div class="empty-section">
+              <h3 class="empty-section-title">サンプルデータで試す</h3>
+              <div class="sample-grid wide" id="emptySampleGrid"></div>
+            </div>
+
+            <div class="empty-section">
+              <h3 class="empty-section-title">対応するグラフの種類</h3>
+              <div class="chart-type-row">
+                <div class="chart-type-item">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="5" y1="20" x2="5" y2="11"></line><line x1="12" y1="20" x2="12" y2="6"></line><line x1="19" y1="20" x2="19" y2="14"></line></svg>
+                  <span>棒</span>
+                </div>
+                <div class="chart-type-item">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 17 9 10 13 14 21 5"></polyline></svg>
+                  <span>折れ線</span>
+                </div>
+                <div class="chart-type-item">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 17 9 10 13 14 21 5 21 20 3 20 Z" fill="currentColor" fill-opacity="0.14"></path></svg>
+                  <span>面</span>
+                </div>
+                <div class="chart-type-item">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="6" cy="16" r="1.4" fill="currentColor" stroke="none"></circle><circle cx="11" cy="8" r="1.4" fill="currentColor" stroke="none"></circle><circle cx="15" cy="13" r="1.4" fill="currentColor" stroke="none"></circle><circle cx="19" cy="6" r="1.4" fill="currentColor" stroke="none"></circle></svg>
+                  <span>散布図</span>
+                </div>
+                <div class="chart-type-item">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="14" width="4" height="6"></rect><rect x="7.5" y="8" width="4" height="12"></rect><rect x="12" y="5" width="4" height="15"></rect><rect x="16.5" y="10" width="4" height="10"></rect></svg>
+                  <span>ヒストグラム</span>
+                </div>
+                <div class="chart-type-item">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="14" width="3" height="6"></rect><rect x="10" y="10" width="3" height="10"></rect><rect x="16" y="16" width="3" height="4"></rect><polyline points="3 9 9 12 15 5 21 9"></polyline></svg>
+                  <span>混在も可</span>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
 
         <!-- グラフビュー -->
