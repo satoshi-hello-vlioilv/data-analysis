@@ -1210,6 +1210,39 @@ body.dnd-column-active .drop-zone.drop-reject {
   padding: 10px 14px 14px;
 }
 
+.chart-body canvas { cursor: crosshair; }
+
+/* ドラッグ範囲選択（グラフ上で直接ズームする際の選択矩形） */
+.chart-zoom-box {
+  position: absolute;
+  pointer-events: none;
+  border: 1.5px solid var(--accent);
+  background: var(--accent-wash);
+  z-index: 5;
+}
+
+.chart-zoom-reset {
+  position: absolute;
+  top: 14px;
+  right: 22px;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 11px 5px 9px;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--accent-strong);
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  box-shadow: var(--shadow);
+  cursor: pointer;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.chart-zoom-reset:hover { border-color: var(--accent); background: var(--accent-wash); }
+
 .chart-notice {
   position: absolute;
   inset: 0;

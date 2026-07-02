@@ -184,7 +184,10 @@
     chartCard: $('chartCard'),
     chartTitle: $('chartTitle'),
     chartMeta: $('chartMeta'),
+    chartBody: $('chartBody'),
     chartCanvas: $('chartCanvas'),
+    chartZoomBox: $('chartZoomBox'),
+    chartZoomResetBtn: $('chartZoomResetBtn'),
     chartNotice: $('chartNotice'),
     tableCard: $('tableCard'),
     tableNote: $('tableNote'),
@@ -865,6 +868,8 @@
     el.matrixCard.hidden = true;
     el.emptyState.hidden = false;
     el.fileInput.value = '';
+    el.chartZoomResetBtn.hidden = true;
+    el.chartZoomBox.hidden = true;
   }
 
   // ---------------------------------------------------------------
@@ -1496,6 +1501,7 @@
     } else {
       el.histValueHint.textContent = model ? rangeHintText(model.dataExtent) : '';
     }
+    updateChartZoomResetVisibility();
   }
 
   /** 範囲入力欄（空欄=自動）を数値または null に変換 */
@@ -1554,6 +1560,163 @@
     const labels = model ? model.fullLabels : [];
     el.xIndexFromLabel.textContent = labels[start] !== undefined ? labels[start] : '';
     el.xIndexToLabel.textContent = labels[end] !== undefined ? labels[end] : '';
+  }
+
+  // ---------------------------------------------------------------
+  // グラフ上でのドラッグ操作（表示範囲をグラフ上で直接ズーム）
+  // サイドバーの数値入力・スライダーと双方向に連動する：
+  //   ドラッグでズーム → 数値入力欄にも反映 / 数値入力欄で調整 → グラフにも反映（既存動作）
+  // 横方向のドラッグはX軸、縦方向はY軸、斜めなら両方を絞り込む。
+  // ---------------------------------------------------------------
+
+  let chartDragStart = null; // { x, y } キャンバス相対ピクセル（chartArea内にクランプ前の生値）
+  let chartDragging = false;
+  const CHART_DRAG_MIN_PX = 6; // これ未満の移動はクリック（ツールチップ用）とみなす
+
+  function chartRelativePos(e) {
+    return Chart.helpers.getRelativePosition(e, state.chartInstance);
+  }
+
+  function chartAreaClamp(pos) {
+    const area = state.chartInstance.chartArea;
+    return {
+      x: Math.min(Math.max(pos.x, area.left), area.right),
+      y: Math.min(Math.max(pos.y, area.top), area.bottom)
+    };
+  }
+
+  function updateChartZoomBox(start, end) {
+    el.chartZoomBox.style.left = Math.min(start.x, end.x) + 'px';
+    el.chartZoomBox.style.top = Math.min(start.y, end.y) + 'px';
+    el.chartZoomBox.style.width = Math.abs(end.x - start.x) + 'px';
+    el.chartZoomBox.style.height = Math.abs(end.y - start.y) + 'px';
+    el.chartZoomBox.hidden = false;
+  }
+
+  /** 現在いずれかの表示範囲が絞り込まれているか（リセットボタンの表示判定） */
+  function hasActiveChartZoom() {
+    if (state.chart.mode === 'hist') {
+      const v = state.chart.hist.valueRange, f = state.chart.hist.freqRange;
+      return v.min !== null || v.max !== null || f.min !== null || f.max !== null;
+    }
+    const y = state.chart.xy.yRange, x = state.chart.xy.xRange, idx = state.chart.xy.xIndexRange;
+    return y.min !== null || y.max !== null || x.min !== null || x.max !== null || idx.start !== null || idx.end !== null;
+  }
+
+  function updateChartZoomResetVisibility() {
+    if (el.chartZoomResetBtn) el.chartZoomResetBtn.hidden = !hasActiveChartZoom();
+  }
+
+  /** ピクセル→値変換の丸め誤差で 1795.00001488… のような値にならないよう、桁数に応じて丸める */
+  function roundForRange(v) {
+    if (!isFinite(v)) return v;
+    const abs = Math.abs(v);
+    if (abs === 0) return 0;
+    const digits = abs >= 100 ? 0 : abs >= 1 ? 2 : 4;
+    const factor = Math.pow(10, digits);
+    return Math.round(v * factor) / factor;
+  }
+
+  /**
+   * ドラッグで選択した矩形（キャンバス相対ピクセル、chartArea内にクランプ済み）から
+   * 実際の表示範囲を計算して state に反映する。applyX/applyY で軸ごとに適用するか選べる
+   * （横方向だけのドラッグでY軸を意図せず絞り込まないようにするため）。
+   */
+  function applyChartZoomFromPixels(p1, p2, applyX, applyY) {
+    const chart = state.chartInstance;
+    const model = state.lastModel;
+    if (!chart || !model) return;
+    const xScale = chart.scales.x;
+    const yScale = chart.scales.y;
+
+    if (applyY) {
+      const yMin = roundForRange(yScale.getValueForPixel(Math.max(p1.y, p2.y)));
+      const yMax = roundForRange(yScale.getValueForPixel(Math.min(p1.y, p2.y)));
+      if (model.mode === 'hist') {
+        state.chart.hist.freqRange = { min: Math.max(0, yMin), max: yMax };
+      } else {
+        state.chart.xy.yRange = { min: yMin, max: yMax };
+      }
+    }
+
+    if (applyX) {
+      const px1 = Math.min(p1.x, p2.x), px2 = Math.max(p1.x, p2.x);
+      if (model.mode === 'hist') {
+        const i1 = xScale.getValueForPixel(px1);
+        const i2 = xScale.getValueForPixel(px2);
+        const v1 = roundForRange(model.bins.min + i1 * model.bins.width);
+        const v2 = roundForRange(model.bins.min + i2 * model.bins.width);
+        state.chart.hist.valueRange = { min: Math.min(v1, v2), max: Math.max(v1, v2) };
+      } else if (model.linear) {
+        const x1 = roundForRange(xScale.getValueForPixel(px1));
+        const x2 = roundForRange(xScale.getValueForPixel(px2));
+        state.chart.xy.xRange = { min: Math.min(x1, x2), max: Math.max(x1, x2) };
+      } else {
+        const i1 = xScale.getValueForPixel(px1);
+        const i2 = xScale.getValueForPixel(px2);
+        const base = model.xIndexRange.start;
+        const fullMax = Math.max(0, model.fullLabelCount - 1);
+        let start = Math.round(base + Math.min(i1, i2));
+        let end = Math.round(base + Math.max(i1, i2));
+        start = Math.max(0, Math.min(start, fullMax));
+        end = Math.max(start, Math.min(end, fullMax));
+        state.chart.xy.xIndexRange = { start, end };
+      }
+    }
+
+    syncRangeInputs();
+    const accordion = document.querySelector(model.mode === 'hist' ? '#histSettings .axis-adjust' : '#xySettings .axis-adjust');
+    if (accordion) accordion.open = true;
+    scheduleUpdate();
+    updateChartZoomResetVisibility();
+  }
+
+  /** グラフ上のドラッグズームを解除し、両軸とも自動表示に戻す */
+  function resetChartZoom() {
+    if (!state.raw) return;
+    if (state.chart.mode === 'hist') {
+      resetRange('histValue');
+      resetRange('histFreq');
+    } else {
+      resetRange('xyY');
+      if (state.lastModel && state.lastModel.linear) resetRange('xyX');
+      else resetRange('xyIndex');
+    }
+    updateChartZoomResetVisibility();
+  }
+
+  function initChartZoom() {
+    el.chartCanvas.addEventListener('mousedown', e => {
+      if (!state.chartInstance || !state.lastModel || e.button !== 0) return;
+      const pos = chartRelativePos(e);
+      const area = state.chartInstance.chartArea;
+      if (pos.x < area.left || pos.x > area.right || pos.y < area.top || pos.y > area.bottom) return;
+      chartDragging = true;
+      chartDragStart = pos;
+      e.preventDefault();
+    });
+
+    document.addEventListener('mousemove', e => {
+      if (!chartDragging || !state.chartInstance) return;
+      updateChartZoomBox(chartDragStart, chartAreaClamp(chartRelativePos(e)));
+    });
+
+    document.addEventListener('mouseup', e => {
+      if (!chartDragging) return;
+      chartDragging = false;
+      el.chartZoomBox.hidden = true;
+      if (!state.chartInstance) { chartDragStart = null; return; }
+      const pos = chartAreaClamp(chartRelativePos(e));
+      const dx = Math.abs(pos.x - chartDragStart.x);
+      const dy = Math.abs(pos.y - chartDragStart.y);
+      const applyX = dx >= CHART_DRAG_MIN_PX;
+      const applyY = dy >= CHART_DRAG_MIN_PX;
+      if (applyX || applyY) applyChartZoomFromPixels(chartDragStart, pos, applyX, applyY);
+      chartDragStart = null;
+    });
+
+    el.chartCanvas.addEventListener('dblclick', () => resetChartZoom());
+    el.chartZoomResetBtn.addEventListener('click', resetChartZoom);
   }
 
   function buildTitle() {
@@ -2028,6 +2191,18 @@
   }
 
   /** state.query / state.chart / state.refLines の内容を、すべての入力欄・一覧表示へ反映する */
+  /** 表示範囲の数値入力欄8つを state の値に同期する（プリセット適用・グラフ上ドラッグ操作の後で使用） */
+  function syncRangeInputs() {
+    el.yRangeMin.value = state.chart.xy.yRange.min ?? '';
+    el.yRangeMax.value = state.chart.xy.yRange.max ?? '';
+    el.xRangeMin.value = state.chart.xy.xRange.min ?? '';
+    el.xRangeMax.value = state.chart.xy.xRange.max ?? '';
+    el.histValueMin.value = state.chart.hist.valueRange.min ?? '';
+    el.histValueMax.value = state.chart.hist.valueRange.max ?? '';
+    el.histFreqMin.value = state.chart.hist.freqRange.min ?? '';
+    el.histFreqMax.value = state.chart.hist.freqRange.max ?? '';
+  }
+
   function syncAllUIFromState() {
     populateXSelect();
     populateGroupBySelect(); // 内部で syncGroupByUI() → renderSeriesList() も走る
@@ -2042,16 +2217,9 @@
     el.chartTitleInput.value = state.chart.title;
     el.xLabelInput.value = state.chart.xy.xLabel;
     el.yLabelInput.value = state.chart.xy.yLabel;
-    el.yRangeMin.value = state.chart.xy.yRange.min ?? '';
-    el.yRangeMax.value = state.chart.xy.yRange.max ?? '';
-    el.xRangeMin.value = state.chart.xy.xRange.min ?? '';
-    el.xRangeMax.value = state.chart.xy.xRange.max ?? '';
     el.histXLabelInput.value = state.chart.hist.xLabel;
     el.histYLabelInput.value = state.chart.hist.yLabel;
-    el.histValueMin.value = state.chart.hist.valueRange.min ?? '';
-    el.histValueMax.value = state.chart.hist.valueRange.max ?? '';
-    el.histFreqMin.value = state.chart.hist.freqRange.min ?? '';
-    el.histFreqMax.value = state.chart.hist.freqRange.max ?? '';
+    syncRangeInputs();
     setMode(state.chart.mode, true);
     renderFilters();
     renderHistSeriesList();
@@ -2122,6 +2290,7 @@
       commitImport(state.importSuggested.headerRowIndex, state.importSuggested.dataStartRowIndex);
     });
     initMatrixEvents();
+    initChartZoom();
 
     // クエリ
     el.addFilterBtn.addEventListener('click', () => {

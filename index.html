@@ -415,8 +415,13 @@
             <h3 id="chartTitle">グラフ</h3>
             <p class="chart-meta" id="chartMeta"></p>
           </figcaption>
-          <div class="chart-body">
-            <canvas id="chartCanvas" role="img" aria-label="グラフ。同じ内容はテーブルタブで表として確認できます"></canvas>
+          <div class="chart-body" id="chartBody">
+            <canvas id="chartCanvas" role="img" aria-label="グラフ。ドラッグで範囲を絞り込めます。同じ内容はテーブルタブで表として確認できます"></canvas>
+            <div class="chart-zoom-box" id="chartZoomBox" hidden></div>
+            <button type="button" class="chart-zoom-reset" id="chartZoomResetBtn" hidden>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+              表示範囲をリセット
+            </button>
             <p class="chart-notice" id="chartNotice" hidden></p>
           </div>
         </figure>
