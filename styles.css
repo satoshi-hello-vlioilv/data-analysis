@@ -1076,3 +1076,71 @@ input.switch:checked::after { transform: translateX(14px); }
   .toolbar-actions { justify-content: flex-end; }
   .chart-body { height: clamp(280px, 46vh, 420px); }
 }
+
+/* ==========================================================================
+   スクロールレス・アプリシェル（PC操作向け）
+   外枠（ヘッダー・フッター・2カラムの骨格）はビューポートに固定し、
+   ページ自体はスクロールしない。サイドバーとコンテンツ領域だけが、
+   それぞれ独立してスクロールする — SPAのアプリシェルと同じ構造。
+   狭い画面（タブレット・スマホ想定）では通常のページスクロールに戻す。
+   ========================================================================== */
+
+@media (min-width: 901px) {
+  html, body { height: 100%; overflow: hidden; }
+
+  .app {
+    height: 100vh;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .app-header, .app-footer { flex-shrink: 0; }
+
+  .layout {
+    flex: 1;
+    min-height: 0;
+    align-items: stretch; /* サイドバー・コンテンツを同じ高さに揃える */
+  }
+
+  .sidebar {
+    height: 100%;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    scrollbar-gutter: stable;
+  }
+
+  .content {
+    height: 100%;
+    min-height: 0;
+    overflow-y: auto;
+    scrollbar-gutter: stable;
+  }
+
+  /* グラフ／テーブル／統計カードは content の残り高さいっぱいに広がり、
+     内部（グラフ本体・テーブル・統計表）だけが必要に応じてスクロールする */
+  .content > .card {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .chart-card .chart-body {
+    flex: 1;
+    height: auto;
+    min-height: 240px;
+  }
+
+  .table-card .table-scroll {
+    flex: 1;
+    min-height: 0;
+    max-height: none;
+  }
+
+  .stats-card #statsContent {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+  }
+}
