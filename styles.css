@@ -820,6 +820,48 @@ input.switch:checked::after { transform: translateX(14px); }
 
 .chip-btn:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-wash); }
 
+/* --- 検出したメタデータ（前置き行）をラベルへ挿入するチップ --- */
+
+.metadata-hint label small { font-weight: 400; color: var(--muted); }
+
+.metadata-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+
+.metadata-chips .chip-btn {
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ==========================================================================
+   プリセット（処理内容一式の保存・書き出し・読み込み）
+   ========================================================================== */
+
+.preset-save-row { display: flex; gap: 6px; margin-bottom: 10px; }
+.preset-save-row input { flex: 1; min-width: 0; }
+
+.preset-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
+.preset-list:empty { margin-bottom: 0; }
+
+.preset-list-empty { font-size: 11.5px; color: var(--muted); padding: 2px 0 8px; }
+
+.preset-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+
+.preset-row-info { min-width: 0; }
+.preset-row-info strong { display: block; font-size: 12.5px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.preset-row-info small { font-size: 10.5px; color: var(--muted); }
+
+.preset-row-actions { display: flex; gap: 4px; flex-shrink: 0; }
+
 /* ==========================================================================
    フィルタ・系列・基準線の行
    ========================================================================== */

@@ -266,6 +266,18 @@ const DataLayer = (() => {
       })
       .filter(row => Array.isArray(row) && row.some(c => !isEmptyCell(c)));
 
+    // --- メタデータ行の抽出（ヘッダー・データ開始行より前の「前置き」行） ---
+    // 出力システム名や対象期間など、後でグラフのタイトル・軸ラベルとして使い回せるように
+    // 生テキストのまま保持しておく（除外されるだけで捨てられないようにする）
+    const metadataLines = [];
+    for (let i = 0; i < startIndex; i++) {
+      if (i === headerRowIndex) continue;
+      const row = aoa[i];
+      if (!Array.isArray(row)) continue;
+      const cells = row.filter(c => !isEmptyCell(c)).map(c => String(c).trim());
+      if (cells.length) metadataLines.push(cells.join(' '));
+    }
+
     const width = Math.max(
       headerRow ? headerRow.length : 0,
       ...bodyRows.map(r => r.length),
@@ -331,7 +343,8 @@ const DataLayer = (() => {
         headerRowIndex: hasHeader ? headerRowIndex : -1,
         dataStartRowIndex: startIndex,
         totalRawRows: aoa.length,
-        excludedRowCount: excludedRows.size
+        excludedRowCount: excludedRows.size,
+        metadataLines
       }
     };
   }

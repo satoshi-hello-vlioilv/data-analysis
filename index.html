@@ -163,6 +163,20 @@
               </div>
             </div>
           </details>
+
+          <details class="accordion" id="presetAccordion">
+            <summary>プリセット<span class="accordion-count" id="presetCount" hidden>0</span></summary>
+            <div class="accordion-body">
+              <p class="import-adjust-hint">ヘッダー行・除外行・フィルタ・グラフ設定など、ここまでの処理内容をまとめて保存し、次回や似た形式の別ファイルに使い回せます。</p>
+              <div class="preset-save-row">
+                <input type="text" id="presetNameInput" placeholder="プリセット名（例: 月次売上レポート）" maxlength="60">
+                <button type="button" class="btn sm" id="savePresetBtn">現在の設定を保存</button>
+              </div>
+              <div class="preset-list" id="presetList"></div>
+              <button type="button" class="btn ghost sm" id="importPresetBtn">ファイルからプリセットを読み込む</button>
+              <input type="file" id="presetFileInput" accept=".json,application/json" hidden>
+            </div>
+          </details>
         </section>
 
         <!-- ステップ3: グラフ -->
@@ -170,6 +184,11 @@
           <div class="segmented" role="group" aria-label="グラフモード" id="modeSegment">
             <button type="button" data-mode="xy" class="active" aria-pressed="true">XYグラフ</button>
             <button type="button" data-mode="hist" aria-pressed="false">ヒストグラム</button>
+          </div>
+
+          <div class="field metadata-hint" id="metadataHint" hidden>
+            <label>検出したメタデータ<small>（前置き行から抽出。クリックでタイトルなどに挿入）</small></label>
+            <div class="metadata-chips" id="metadataChips"></div>
           </div>
 
           <div class="field">

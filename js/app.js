@@ -120,7 +120,19 @@
     limitInput: $('limitInput'),
     queryCode: $('queryCode'),
     copyQueryBtn: $('copyQueryBtn'),
+
+    // プリセット（処理内容一式の保存・書き出し・読み込み）
+    presetAccordion: $('presetAccordion'),
+    presetCount: $('presetCount'),
+    presetNameInput: $('presetNameInput'),
+    savePresetBtn: $('savePresetBtn'),
+    presetList: $('presetList'),
+    importPresetBtn: $('importPresetBtn'),
+    presetFileInput: $('presetFileInput'),
+
     modeSegment: $('modeSegment'),
+    metadataHint: $('metadataHint'),
+    metadataChips: $('metadataChips'),
     chartTitleInput: $('chartTitleInput'),
     xySettings: $('xySettings'),
     histSettings: $('histSettings'),
@@ -410,6 +422,7 @@
     el.fileInfoName.textContent = table.meta.sourceName;
     el.fileInfoDetail.textContent = table.rows.length.toLocaleString('ja-JP') + '行 × ' + table.columns.length + '列';
     renderColumnChips();
+    renderMetadataChips();
     renderImportPanel();
     el.stepTabQuery.disabled = false;
     el.stepTabChart.disabled = false;
@@ -839,6 +852,7 @@
     el.importAdjust.hidden = true;
     el.importAdjust.open = false;
     el.matrixTab.hidden = true;
+    el.metadataHint.hidden = true;
     el.stepTabQuery.disabled = true;
     el.stepTabChart.disabled = true;
     el.stepDataBadge.textContent = '1';
@@ -895,6 +909,31 @@
         document.body.classList.remove('dnd-column-active');
       });
       el.columnChips.appendChild(chip);
+    });
+  }
+
+  // 直前にフォーカスしていたラベル系入力欄（メタデータチップの挿入先の記憶用）
+  const LABEL_INPUT_IDS = ['chartTitleInput', 'xLabelInput', 'yLabelInput', 'histXLabelInput', 'histYLabelInput'];
+  let lastFocusedLabelInput = null;
+
+  /** 前置き行から抽出したメタデータを、タイトル・軸ラベルへワンクリックで挿入できるチップとして表示 */
+  function renderMetadataChips() {
+    const lines = (state.raw.meta.metadataLines || []).filter(Boolean);
+    el.metadataHint.hidden = lines.length === 0;
+    el.metadataChips.textContent = '';
+    lines.forEach(line => {
+      const chip = document.createElement('button');
+      chip.type = 'button';
+      chip.className = 'chip-btn';
+      chip.textContent = line;
+      chip.title = line + '（クリックで挿入）';
+      chip.addEventListener('click', () => {
+        const target = (lastFocusedLabelInput && document.contains(lastFocusedLabelInput)) ? lastFocusedLabelInput : el.chartTitleInput;
+        target.value = target.value ? target.value + ' ' + line : line;
+        target.dispatchEvent(new Event('input', { bubbles: true }));
+        target.focus();
+      });
+      el.metadataChips.appendChild(chip);
     });
   }
 
@@ -1746,6 +1785,281 @@
   }
 
   // ---------------------------------------------------------------
+  // プリセット — 取り込み設定・フィルタ・グラフ設定など「処理ステップ」一式を
+  // 名前付きで記憶し、保存・書き出し（JSON）・読み込みで使い回せるようにする。
+  // 以前「クエリ化」として依頼された内容の本来の意図はこちら（フィルタ/並び替え
+  // だけのSQL風プレビューではなく、処理全体を再利用可能な形で残すこと）だったため、
+  // その意図を汲んで実装している。
+  // ---------------------------------------------------------------
+
+  const PRESET_STORAGE_KEY = 'chartlab-presets';
+  let presets = [];
+
+  function loadPresetsFromStorage() {
+    try {
+      const raw = localStorage.getItem(PRESET_STORAGE_KEY);
+      const parsed = raw ? JSON.parse(raw) : [];
+      presets = Array.isArray(parsed) ? parsed : [];
+    } catch (e) {
+      presets = [];
+    }
+  }
+
+  function savePresetsToStorage() {
+    try { localStorage.setItem(PRESET_STORAGE_KEY, JSON.stringify(presets)); } catch (e) { /* 容量超過・プライベートモード等 */ }
+  }
+
+  /** 現在の状態から、再現に必要な処理ステップ一式を抜き出す */
+  function serializeCurrentConfig(name) {
+    return {
+      id: 'preset_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7),
+      name: name,
+      createdAt: new Date().toISOString(),
+      version: 1,
+      importStructure: state.importRaw ? {
+        headerRowIndex: state.importHeaderRow,
+        dataStartRowIndex: state.importDataStart,
+        excludedRows: [...state.importExcludedRows]
+      } : null,
+      query: {
+        filters: state.query.filters.map(f => ({ column: f.column, op: f.op, value: f.value })),
+        groupBy: state.query.groupBy,
+        sort: state.query.sort,
+        limit: state.query.limit
+      },
+      chart: {
+        mode: state.chart.mode,
+        x: state.chart.x,
+        series: state.chart.series.map(s => ({ column: s.column, agg: s.agg, type: s.type, slot: s.slot })),
+        stacked: state.chart.stacked,
+        bins: { ...state.chart.bins },
+        normalCurve: state.chart.normalCurve,
+        title: state.chart.title,
+        xy: {
+          xLabel: state.chart.xy.xLabel,
+          yLabel: state.chart.xy.yLabel,
+          xRange: { ...state.chart.xy.xRange },
+          yRange: { ...state.chart.xy.yRange },
+          xIndexRange: { ...state.chart.xy.xIndexRange }
+        },
+        hist: {
+          xLabel: state.chart.hist.xLabel,
+          yLabel: state.chart.hist.yLabel,
+          valueRange: { ...state.chart.hist.valueRange },
+          freqRange: { ...state.chart.hist.freqRange }
+        }
+      },
+      refLines: state.refLines.map(l => ({ label: l.label, value: l.value }))
+    };
+  }
+
+  function presetSummary(preset) {
+    const parts = [];
+    if (preset.importStructure) parts.push('取り込み設定あり');
+    const filterCount = preset.query && preset.query.filters ? preset.query.filters.length : 0;
+    if (filterCount) parts.push('フィルタ' + filterCount + '件');
+    const seriesCount = preset.chart && preset.chart.series ? preset.chart.series.length : 0;
+    parts.push('系列' + seriesCount + '件');
+    parts.push(preset.chart && preset.chart.mode === 'hist' ? 'ヒストグラム' : 'XYグラフ');
+    return parts.join('・');
+  }
+
+  function renderPresetList() {
+    el.presetCount.hidden = presets.length === 0;
+    el.presetCount.textContent = presets.length;
+    el.presetList.textContent = '';
+    if (presets.length === 0) {
+      const empty = document.createElement('p');
+      empty.className = 'preset-list-empty';
+      empty.textContent = 'まだ保存されたプリセットはありません';
+      el.presetList.appendChild(empty);
+      return;
+    }
+    presets.forEach(preset => {
+      const row = document.createElement('div');
+      row.className = 'preset-row';
+
+      const info = document.createElement('div');
+      info.className = 'preset-row-info';
+      const name = document.createElement('strong');
+      name.textContent = preset.name;
+      const detail = document.createElement('small');
+      const date = new Date(preset.createdAt);
+      const dateStr = isNaN(date.getTime()) ? '' : (date.getMonth() + 1) + '/' + date.getDate() + ' 保存 ・ ';
+      detail.textContent = dateStr + presetSummary(preset);
+      info.append(name, detail);
+
+      const actions = document.createElement('div');
+      actions.className = 'preset-row-actions';
+
+      const applyBtn = document.createElement('button');
+      applyBtn.type = 'button';
+      applyBtn.className = 'btn ghost sm';
+      applyBtn.textContent = '適用';
+      applyBtn.addEventListener('click', () => applyPreset(preset));
+
+      const exportBtn = document.createElement('button');
+      exportBtn.type = 'button';
+      exportBtn.className = 'icon-btn sm';
+      exportBtn.setAttribute('aria-label', 'プリセットを書き出し');
+      exportBtn.title = 'ファイルに書き出す';
+      exportBtn.textContent = '↓';
+      exportBtn.addEventListener('click', () => exportPreset(preset));
+
+      const deleteBtn = document.createElement('button');
+      deleteBtn.type = 'button';
+      deleteBtn.className = 'icon-btn sm';
+      deleteBtn.setAttribute('aria-label', 'プリセットを削除');
+      deleteBtn.title = '削除';
+      deleteBtn.textContent = '×';
+      deleteBtn.addEventListener('click', () => deletePreset(preset.id));
+
+      actions.append(applyBtn, exportBtn, deleteBtn);
+      row.append(info, actions);
+      el.presetList.appendChild(row);
+    });
+  }
+
+  function saveCurrentAsPreset() {
+    const name = el.presetNameInput.value.trim() || ('プリセット ' + (presets.length + 1));
+    const preset = serializeCurrentConfig(name);
+    presets.unshift(preset);
+    savePresetsToStorage();
+    renderPresetList();
+    el.presetNameInput.value = '';
+    showToast('success', '「' + name + '」を保存しました');
+  }
+
+  function deletePreset(id) {
+    presets = presets.filter(p => p.id !== id);
+    savePresetsToStorage();
+    renderPresetList();
+  }
+
+  function exportPreset(preset) {
+    const blob = new Blob([JSON.stringify(preset, null, 2)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    const safeName = preset.name.replace(/[\\/:*?"<>|]/g, '_');
+    a.download = 'preset_' + safeName + '.json';
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+    showToast('success', 'プリセットを書き出しました');
+  }
+
+  function importPresetFromFile(file) {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = e => {
+      let parsed;
+      try {
+        parsed = JSON.parse(e.target.result);
+      } catch (err) {
+        showToast('error', 'プリセットファイルの読み込みに失敗しました（JSON形式ではありません）');
+        return;
+      }
+      if (!parsed || typeof parsed !== 'object' || !parsed.chart || !parsed.query) {
+        showToast('error', 'プリセットファイルの形式が正しくありません');
+        return;
+      }
+      parsed.id = 'preset_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
+      parsed.name = parsed.name || 'インポートしたプリセット';
+      presets.unshift(parsed);
+      savePresetsToStorage();
+      renderPresetList();
+      showToast('success', '「' + parsed.name + '」を読み込みました');
+    };
+    reader.onerror = () => showToast('error', 'ファイルの読み込みに失敗しました');
+    reader.readAsText(file);
+  }
+
+  /** 保存済みプリセットを現在のデータへ適用する（列名が一致しない設定は安全に読み飛ばす） */
+  function applyPreset(preset) {
+    if (!state.raw) { showToast('warning', '先にデータを読み込んでから適用してください'); return; }
+
+    const applyQueryAndChart = () => {
+      const cols = state.raw.columns;
+      const numCols = new Set(cols.filter(c => c.type === 'number').map(c => c.name));
+      const colExists = name => cols.some(c => c.name === name);
+
+      const q = preset.query || {};
+      state.query = {
+        filters: (q.filters || []).filter(f => colExists(f.column)).map(f => ({ column: f.column, op: f.op, value: f.value })),
+        groupBy: q.groupBy && colExists(q.groupBy) ? q.groupBy : '',
+        sort: q.sort || 'auto',
+        limit: q.limit || null
+      };
+
+      const c = preset.chart || {};
+      state.chart.mode = c.mode === 'hist' ? 'hist' : 'xy';
+      state.chart.x = c.x && colExists(c.x) ? c.x : '';
+      state.chart.series = (c.series || [])
+        .filter(s => numCols.has(s.column))
+        .map(s => ({ id: uid(), column: s.column, agg: s.agg || 'sum', type: s.type || 'bar', slot: typeof s.slot === 'number' ? s.slot : nextFreeSlot() }));
+      state.chart.stacked = !!c.stacked;
+      state.chart.normalCurve = !!c.normalCurve;
+      state.chart.bins = { method: (c.bins && c.bins.method) || 'sturges', count: (c.bins && c.bins.count) || 10 };
+      state.chart.title = c.title || '';
+      state.chart.xy = {
+        xLabel: (c.xy && c.xy.xLabel) || '',
+        yLabel: (c.xy && c.xy.yLabel) || '',
+        xRange: { min: (c.xy && c.xy.xRange && c.xy.xRange.min) ?? null, max: (c.xy && c.xy.xRange && c.xy.xRange.max) ?? null },
+        yRange: { min: (c.xy && c.xy.yRange && c.xy.yRange.min) ?? null, max: (c.xy && c.xy.yRange && c.xy.yRange.max) ?? null },
+        xIndexRange: { start: (c.xy && c.xy.xIndexRange && c.xy.xIndexRange.start) ?? null, end: (c.xy && c.xy.xIndexRange && c.xy.xIndexRange.end) ?? null }
+      };
+      state.chart.hist = {
+        xLabel: (c.hist && c.hist.xLabel) || '',
+        yLabel: (c.hist && c.hist.yLabel) || '',
+        valueRange: { min: (c.hist && c.hist.valueRange && c.hist.valueRange.min) ?? null, max: (c.hist && c.hist.valueRange && c.hist.valueRange.max) ?? null },
+        freqRange: { min: (c.hist && c.hist.freqRange && c.hist.freqRange.min) ?? null, max: (c.hist && c.hist.freqRange && c.hist.freqRange.max) ?? null }
+      };
+      state.refLines = (preset.refLines || []).map(l => ({ id: uid(), label: l.label || '', value: l.value }));
+
+      syncAllUIFromState();
+      switchStep('chart');
+      showToast('success', 'プリセット「' + preset.name + '」を適用しました');
+    };
+
+    if (preset.importStructure && state.importRaw) {
+      state.importExcludedRows = new Set(preset.importStructure.excludedRows || []);
+      commitImport(preset.importStructure.headerRowIndex, preset.importStructure.dataStartRowIndex);
+    }
+    applyQueryAndChart();
+  }
+
+  /** state.query / state.chart / state.refLines の内容を、すべての入力欄・一覧表示へ反映する */
+  function syncAllUIFromState() {
+    populateXSelect();
+    populateGroupBySelect(); // 内部で syncGroupByUI() → renderSeriesList() も走る
+    el.sortSelect.value = state.query.sort;
+    el.limitInput.value = state.query.limit || '';
+    el.stackedToggle.checked = state.chart.stacked;
+    el.normalCurveToggle.checked = state.chart.normalCurve;
+    el.binMethodSelect.value = state.chart.bins.method;
+    el.binCountRange.value = state.chart.bins.count;
+    el.binCountOut.textContent = state.chart.bins.count;
+    el.binCountField.hidden = state.chart.bins.method !== 'custom';
+    el.chartTitleInput.value = state.chart.title;
+    el.xLabelInput.value = state.chart.xy.xLabel;
+    el.yLabelInput.value = state.chart.xy.yLabel;
+    el.yRangeMin.value = state.chart.xy.yRange.min ?? '';
+    el.yRangeMax.value = state.chart.xy.yRange.max ?? '';
+    el.xRangeMin.value = state.chart.xy.xRange.min ?? '';
+    el.xRangeMax.value = state.chart.xy.xRange.max ?? '';
+    el.histXLabelInput.value = state.chart.hist.xLabel;
+    el.histYLabelInput.value = state.chart.hist.yLabel;
+    el.histValueMin.value = state.chart.hist.valueRange.min ?? '';
+    el.histValueMax.value = state.chart.hist.valueRange.max ?? '';
+    el.histFreqMin.value = state.chart.hist.freqRange.min ?? '';
+    el.histFreqMax.value = state.chart.hist.freqRange.max ?? '';
+    setMode(state.chart.mode, true);
+    renderFilters();
+    renderHistSeriesList();
+    renderRefLines();
+    scheduleUpdate();
+  }
+
+  // ---------------------------------------------------------------
   // イベント結線
   // ---------------------------------------------------------------
 
@@ -1828,6 +2142,17 @@
     });
     el.copyQueryBtn.addEventListener('click', copyQuery);
 
+    // プリセット
+    el.savePresetBtn.addEventListener('click', saveCurrentAsPreset);
+    el.presetNameInput.addEventListener('keydown', e => {
+      if (e.key === 'Enter') { e.preventDefault(); saveCurrentAsPreset(); }
+    });
+    el.importPresetBtn.addEventListener('click', () => el.presetFileInput.click());
+    el.presetFileInput.addEventListener('change', e => {
+      if (e.target.files && e.target.files.length) importPresetFromFile(e.target.files[0]);
+      el.presetFileInput.value = '';
+    });
+
     // グラフ設定
     el.modeSegment.querySelectorAll('button').forEach(btn => {
       btn.addEventListener('click', () => setMode(btn.dataset.mode, false));
@@ -1855,6 +2180,11 @@
     el.chartTitleInput.addEventListener('input', () => {
       state.chart.title = el.chartTitleInput.value;
       scheduleUpdate();
+    });
+
+    // メタデータチップの挿入先を、直前にフォーカスしていたラベル欄にする
+    LABEL_INPUT_IDS.forEach(id => {
+      el[id].addEventListener('focus', () => { lastFocusedLabelInput = el[id]; });
     });
 
     // 軸ラベル・表示範囲（XY）
@@ -1922,6 +2252,8 @@
     initTheme();
     renderSampleGrids();
     populateSortSelect();
+    loadPresetsFromStorage();
+    renderPresetList();
     bindEvents();
     switchStep('data');
   }
