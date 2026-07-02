@@ -324,44 +324,6 @@ button { font-family: inherit; }
 }
 .file-info-text small { font-size: 11px; color: var(--text-secondary); }
 
-/* --- ヒントカード（データ未読込時、サイドバーの余白を使って機能を予告） --- */
-
-.tips-card {
-  margin-top: 14px;
-  padding-top: 14px;
-  border-top: 1px dashed var(--border);
-}
-
-.tips-card h4 {
-  font-size: 11.5px;
-  font-weight: 700;
-  color: var(--text-secondary);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  margin-bottom: 8px;
-}
-
-.tips-card ul { display: flex; flex-direction: column; gap: 7px; }
-
-.tips-card li {
-  position: relative;
-  padding-left: 15px;
-  font-size: 12px;
-  line-height: 1.6;
-  color: var(--text-secondary);
-}
-
-.tips-card li::before {
-  content: "";
-  position: absolute;
-  left: 2px;
-  top: 7px;
-  width: 4px;
-  height: 4px;
-  border-radius: 50%;
-  background: var(--accent);
-}
-
 /* --- 列チップ（型付き） --- */
 
 /* サイドバー直下（全ステップ共通）に置かれる、常時表示の列パレット */
@@ -1225,44 +1187,8 @@ body.dnd-column-active .drop-zone.drop-reject {
   border-radius: var(--radius-lg);
 }
 
-.empty-hero-text h2 { font-size: 18px; font-weight: 700; color: var(--text-primary); margin-bottom: 5px; }
-.empty-hero-text p { font-size: 13px; line-height: 1.7; }
-
-/* --- 3ステップの流れ（サイドバーのステッパーと視覚的に対応） --- */
-
-.flow-guide {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 16px;
-  flex-wrap: wrap;
-  padding: 18px 22px;
-  background: var(--accent-wash);
-  border-radius: var(--radius-lg);
-  list-style: none;
-  margin: 0;
-}
-
-.flow-step { display: flex; align-items: center; gap: 10px; text-align: left; }
-
-.flow-num {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 26px;
-  height: 26px;
-  border-radius: 50%;
-  background: var(--accent);
-  color: #fff;
-  font-size: 12.5px;
-  font-weight: 700;
-  flex-shrink: 0;
-}
-
-.flow-step strong { display: block; font-size: 12.5px; font-weight: 700; color: var(--text-primary); }
-.flow-step small { font-size: 11px; color: var(--text-secondary); }
-
-.flow-arrow { color: var(--muted); font-size: 15px; flex-shrink: 0; }
+.empty-hero-text h2 { font-size: 19px; font-weight: 700; color: var(--text-primary); margin-bottom: 6px; }
+.empty-hero-text p { font-size: 13px; line-height: 1.75; }
 
 /* --- セクション見出し --- */
 
@@ -1276,33 +1202,19 @@ body.dnd-column-active .drop-zone.drop-reject {
   text-align: left;
 }
 
-/* --- 対応グラフの種類ショーケース --- */
-
-.chart-type-row {
-  display: flex;
-  gap: 10px;
-  flex-wrap: wrap;
+/* サンプルカードは正方形に近いサイズで並べ、横幅いっぱいに間延びさせない */
+.empty-section .sample-grid.wide {
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
 }
 
-.chart-type-item {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 7px;
-  flex: 1;
-  min-width: 84px;
-  padding: 14px 10px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  color: var(--accent);
+.empty-footnote {
+  font-size: 12px;
+  color: var(--muted);
+  text-align: left;
 }
-
-.chart-type-item span { font-size: 11px; font-weight: 600; color: var(--text-primary); }
 
 @media (max-width: 640px) {
   .empty-hero { flex-direction: column; text-align: center; }
-  .flow-guide { flex-direction: column; align-items: stretch; }
-  .flow-arrow { display: none; }
 }
 
 /* ==========================================================================
