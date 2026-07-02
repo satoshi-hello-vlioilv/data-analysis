@@ -82,26 +82,50 @@ const DataLayer = (() => {
   // 1. ファイル読込 → 生の行列（AOA）
   // ---------------------------------------------------------------
 
+  /**
+   * バイト列 → 文字列。まずUTF-8として厳密にデコードし、不正なバイト列（=UTF-8ではない）
+   * であればShift-JIS（CP932）として再デコードする。日本語圏のExcelはCSVをShift-JISで
+   * 出力することが多く、既定でUTF-8扱いすると文字化けするため。
+   */
+  function decodeTextBuffer(buffer) {
+    try {
+      return { text: new TextDecoder('utf-8', { fatal: true }).decode(buffer), encoding: 'UTF-8' };
+    } catch (e) {
+      try {
+        return { text: new TextDecoder('shift-jis', { fatal: true }).decode(buffer), encoding: 'Shift_JIS' };
+      } catch (e2) {
+        // どちらでも厳密デコードできない場合は、UTF-8で緩くデコードして読み込みだけは継続する
+        return { text: new TextDecoder('utf-8').decode(buffer), encoding: 'UTF-8' };
+      }
+    }
+  }
+
   /** CSV / TSV ファイル → 生の行列（フィルタ・型推論なし、行番号を保つ） */
   function parseCSVRaw(file) {
     return new Promise((resolve, reject) => {
-      Papa.parse(file, {
-        header: false,
-        dynamicTyping: false,
-        skipEmptyLines: false,
-        delimitersToGuess: [',', '\t', ';', '|'],
-        complete: results => {
-          if (!results.data || results.data.length === 0) {
-            reject(new Error('ファイルにデータが含まれていません'));
-            return;
-          }
-          const aoa = results.data;
-          // BOM 除去
-          if (typeof aoa[0][0] === 'string') aoa[0][0] = aoa[0][0].replace(/^﻿/, '');
-          resolve({ aoa, sourceName: file.name });
-        },
-        error: err => reject(new Error('CSVの解析に失敗しました: ' + err.message))
-      });
+      const reader = new FileReader();
+      reader.onload = e => {
+        const { text } = decodeTextBuffer(e.target.result);
+        Papa.parse(text, {
+          header: false,
+          dynamicTyping: false,
+          skipEmptyLines: false,
+          delimitersToGuess: [',', '\t', ';', '|'],
+          complete: results => {
+            if (!results.data || results.data.length === 0) {
+              reject(new Error('ファイルにデータが含まれていません'));
+              return;
+            }
+            const aoa = results.data;
+            // BOM 除去（TextDecoderが除去しない場合の保険）
+            if (typeof aoa[0][0] === 'string') aoa[0][0] = aoa[0][0].replace(/^﻿/, '');
+            resolve({ aoa, sourceName: file.name });
+          },
+          error: err => reject(new Error('CSVの解析に失敗しました: ' + err.message))
+        });
+      };
+      reader.onerror = () => reject(new Error('ファイルの読み込みに失敗しました'));
+      reader.readAsArrayBuffer(file);
     });
   }
 

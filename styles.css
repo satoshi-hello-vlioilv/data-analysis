@@ -291,7 +291,7 @@ button { font-family: inherit; }
   transition: border-color 0.15s ease, background-color 0.15s ease;
 }
 
-.drop-area:hover, .drop-area.dragover {
+.drop-area:hover {
   border-color: var(--accent);
   background: var(--accent-wash);
 }
@@ -511,7 +511,7 @@ button { font-family: inherit; }
 
 .import-preview-table tr.row-header { background: var(--accent-wash); }
 .import-preview-table tr.row-header td, .import-preview-table tr.row-header th { font-weight: 700; color: var(--accent-strong); }
-.import-preview-table tr.row-excluded { opacity: 0.4; }
+.import-preview-table tr.row-excluded { opacity: 0.45; }
 .import-preview-table tr.row-more td { text-align: center; color: var(--muted); font-style: italic; }
 
 .import-row-badge {
@@ -521,12 +521,17 @@ button { font-family: inherit; }
   font-size: 9.5px;
   font-weight: 700;
   border-radius: 999px;
-  background: var(--accent);
+  background: var(--accent); /* 既定 = ヘッダー行 */
   color: #fff;
   vertical-align: middle;
 }
 
-.import-row-exclude-badge { background: var(--muted); }
+/* 除外（手動）: 能動的に取り除いた行 → 警告寄りの色で「アクション済み」を示す */
+.import-row-exclude-badge { background: var(--status-serious); }
+/* 前置き（自動）: データ開始行より前で構造的に除外された行 → 中立グレー */
+.import-row-preamble-badge { background: var(--muted); }
+/* データ開始 */
+.import-row-data-badge { background: var(--status-good); }
 
 /* ==========================================================================
    生データマトリクス（複雑な形式の取り込み調整 — メイン画面）
@@ -546,7 +551,9 @@ button { font-family: inherit; }
 
 .legend-swatch { width: 10px; height: 10px; border-radius: 3px; flex-shrink: 0; }
 .legend-header { background: var(--accent-wash); border: 1px solid var(--accent); }
-.legend-excluded { background: var(--muted); opacity: 0.5; }
+.legend-data { background: var(--surface); border: 1px solid var(--border); box-shadow: inset 2px 0 0 var(--status-good); }
+.legend-preamble { background: var(--muted); opacity: 0.5; }
+.legend-excluded { background: var(--status-serious); opacity: 0.7; }
 .legend-x { background: var(--accent); }
 .legend-series { background: var(--series-legend-color, var(--status-good)); }
 
@@ -612,7 +619,12 @@ button { font-family: inherit; }
   outline-offset: -1.5px;
 }
 
-.matrix-table tr.row-excluded-manual { opacity: 0.45; }
+.matrix-table tr.row-excluded-manual { opacity: 0.5; }
+.matrix-table tr.row-excluded-manual td { background: color-mix(in srgb, var(--status-serious) 6%, transparent); }
+.matrix-table tr.row-excluded-preamble td { background: color-mix(in srgb, var(--muted) 8%, transparent); }
+
+/* データ本体の行は、帯の色（緑）が続くことで「ここからここまでがデータ」と一目で分かるようにする */
+.matrix-table tr.row-data .import-row-gutter { box-shadow: inset 3px 0 0 var(--status-good); }
 
 /* 列数が多いファイルでも行番号・操作ボタンが常に見えるよう、横スクロール時も左端に固定 */
 .matrix-table .import-row-gutter { position: sticky; left: 0; z-index: 1; background: var(--surface); }
@@ -1281,6 +1293,40 @@ body.dnd-column-active .drop-zone.drop-reject {
 
 .empty-hero-text h2 { font-size: 19px; font-weight: 700; color: var(--text-primary); margin-bottom: 6px; }
 .empty-hero-text p { font-size: 13px; line-height: 1.75; }
+
+/* ==========================================================================
+   画面全体へのファイルドラッグ＆ドロップ用オーバーレイ
+   ========================================================================== */
+
+.file-drop-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: var(--accent-wash);
+  pointer-events: none; /* イベントは window で拾うため、オーバーレイ自体は素通りさせる */
+}
+
+.file-drop-overlay-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  max-width: min(420px, 100%);
+  padding: 40px 48px;
+  text-align: center;
+  background: var(--surface-raised);
+  border: 2.5px dashed var(--accent);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 12px 40px rgba(11, 11, 11, 0.18);
+}
+
+.file-drop-overlay-inner svg { color: var(--accent); }
+.file-drop-overlay-inner strong { font-size: 15px; color: var(--text-primary); }
+.file-drop-overlay-inner small { font-size: 12px; color: var(--text-secondary); }
 
 /* --- セクション見出し --- */
 

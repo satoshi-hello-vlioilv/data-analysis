@@ -184,7 +184,8 @@
     exportCsvBtn: $('exportCsvBtn'),
     toast: $('toast'),
     toastIcon: $('toastIcon'),
-    toastMessage: $('toastMessage')
+    toastMessage: $('toastMessage'),
+    fileDropOverlay: $('fileDropOverlay')
   };
 
   // ---------------------------------------------------------------
@@ -311,6 +312,42 @@
   }
 
   /**
+   * 画面全体をファイルのドロップ対象にする。
+   * 列チップ・系列の並び替えなど、アプリ内の独自ドラッグ＆ドロップ（application/x-* 型）は
+   * dataTransfer.types に "Files" を含まないため、ここでは干渉しない。
+   */
+  function initWindowFileDrop() {
+    let dragCounter = 0;
+    const isFileDrag = e => !!(e.dataTransfer && Array.prototype.includes.call(e.dataTransfer.types || [], 'Files'));
+
+    window.addEventListener('dragenter', e => {
+      if (!isFileDrag(e)) return;
+      e.preventDefault();
+      dragCounter++;
+      el.fileDropOverlay.hidden = false;
+    });
+    window.addEventListener('dragover', e => {
+      if (!isFileDrag(e)) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'copy';
+    });
+    window.addEventListener('dragleave', e => {
+      if (!isFileDrag(e)) return;
+      dragCounter = Math.max(0, dragCounter - 1);
+      if (dragCounter === 0) el.fileDropOverlay.hidden = true;
+    });
+    window.addEventListener('drop', e => {
+      if (!isFileDrag(e)) return;
+      e.preventDefault();
+      dragCounter = 0;
+      el.fileDropOverlay.hidden = true;
+      if (e.dataTransfer.files && e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+    });
+    // ブラウザ外へドラッグが抜けた場合の保険（dragleaveが発火しないケースへの対策）
+    window.addEventListener('dragend', () => { dragCounter = 0; el.fileDropOverlay.hidden = true; });
+  }
+
+  /**
    * 取り込み設定（ヘッダー行・データ開始行・除外行）を確定し、テーブルを再構築する。
    * ファイル選択直後の初回確定にも、プレビュー／マトリクスでの手動調整にも使う。
    */
@@ -326,11 +363,11 @@
     }
     state.importHeaderRow = headerRowIndex;
     state.importDataStart = dataStartRowIndex;
-    // 初回読込は完成したグラフをすぐ見せるが、生データマトリクス等での再調整時は
-    // 表示中のタブ（生データ・テーブルなど）から強制的に切り替えない
-    loadTable(table, { switchToChart: !!opts.initial });
+    // ファイル読込直後は、まず生データマトリクスで自動検出結果を確認できるようにする
+    // （サンプルデータや再調整時は、表示中のタブから強制的に切り替えない）
+    loadTable(table, { view: opts.initial ? 'matrix' : null });
     if (opts.initial) {
-      switchStep('chart'); // 読み込み直後は完成したグラフをすぐ見せる
+      switchStep('data'); // マトリクスと一緒に、データタブのファイル情報・取り込み設定を見せる
       const parts = [table.rows.length.toLocaleString('ja-JP') + '行 × ' + table.columns.length + '列を読み込みました'];
       parts.push(table.meta.hasHeader ? 'ヘッダー行を検出' : '列名を自動生成');
       showToast('success', parts.join('・'));
@@ -342,7 +379,7 @@
 
   /** テーブルを取り込み、賢い初期設定でグラフを立ち上げる */
   function loadTable(table, loadOpts) {
-    loadOpts = loadOpts || { switchToChart: true };
+    loadOpts = loadOpts || { view: 'chart' };
     // 前のデータセットのフィルタ候補リストを掃除（同名列との混同を防ぐ）
     document.querySelectorAll('datalist[id^="dl-"]').forEach(d => d.remove());
     state.raw = table;
@@ -404,7 +441,7 @@
     renderHistSeriesList();
     renderRefLines();
     // 現在表示中のタブ（生データマトリクス等）を、可能な限り維持したまま再同期する
-    switchView(loadOpts.switchToChart ? 'chart' : state.view);
+    switchView(loadOpts.view || state.view);
     scheduleUpdate();
   }
 
@@ -491,10 +528,15 @@
     for (let i = 0; i < shown; i++) {
       const row = Array.isArray(aoa[i]) ? aoa[i] : [];
       const tr = document.createElement('tr');
-      const isExcludedManual = state.importExcludedRows.has(i);
-      if (i === state.importHeaderRow) tr.classList.add('row-header');
-      else if (i < state.importDataStart) tr.classList.add('row-excluded');
+      const isHeader = i === state.importHeaderRow;
+      const isExcludedManual = !isHeader && state.importExcludedRows.has(i);
+      const isPreamble = !isHeader && !isExcludedManual && i < state.importDataStart;
+      // 4カテゴリ（ヘッダー／前置き／除外／データ）を色分けし、自動検出の判定結果が
+      // どの行にどう適用されたか一目で分かるようにする
+      if (isHeader) tr.classList.add('row-header');
+      else if (isPreamble) tr.classList.add('row-excluded', 'row-excluded-preamble');
       else if (isExcludedManual) tr.classList.add('row-excluded', 'row-excluded-manual');
+      else tr.classList.add('row-data');
 
       const gutter = document.createElement('td');
       gutter.className = 'import-row-gutter';
@@ -531,20 +573,17 @@
       actions.append(hBtn, sBtn, xBtn);
       inner.append(num, actions);
 
-      if (i === state.importHeaderRow) {
+      // バッジは区分の境界（ヘッダー行・前置き行・除外行・データ開始行）にだけ付け、
+      // データ本体の行すべてには繰り返さない（.row-data の帯色で「データ」区分を示す）
+      let badgeText = '', badgeClass = '';
+      if (isHeader) { badgeText = 'ヘッダー'; }
+      else if (isExcludedManual) { badgeText = '除外'; badgeClass = 'import-row-exclude-badge'; }
+      else if (isPreamble) { badgeText = '前置き'; badgeClass = 'import-row-preamble-badge'; }
+      else if (i === state.importDataStart) { badgeText = 'データ開始'; badgeClass = 'import-row-data-badge'; }
+      if (badgeText) {
         const badge = document.createElement('span');
-        badge.className = 'import-row-badge';
-        badge.textContent = 'ヘッダー';
-        inner.appendChild(badge);
-      } else if (isExcludedManual) {
-        const badge = document.createElement('span');
-        badge.className = 'import-row-badge import-row-exclude-badge';
-        badge.textContent = '除外';
-        inner.appendChild(badge);
-      } else if (i === state.importDataStart) {
-        const badge = document.createElement('span');
-        badge.className = 'import-row-badge';
-        badge.textContent = '開始';
+        badge.className = 'import-row-badge' + (badgeClass ? ' ' + badgeClass : '');
+        badge.textContent = badgeText;
         inner.appendChild(badge);
       }
       gutter.appendChild(inner);
@@ -1738,22 +1777,12 @@
     bindColumnDropZone(el.seriesList, { numericOnly: true, onDrop: column => addSeries(column) });
     bindColumnDropZone(el.histSeriesList, { numericOnly: true, onDrop: column => addSeries(column) });
 
-    // ファイル読み込み
+    // ファイル読み込み（ドラッグ＆ドロップは画面全体で受け付ける — initWindowFileDrop 参照）
     el.dropArea.addEventListener('click', () => el.fileInput.click());
     el.dropArea.addEventListener('keydown', e => {
       if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); el.fileInput.click(); }
     });
-    ['dragenter', 'dragover'].forEach(ev => el.dropArea.addEventListener(ev, e => {
-      e.preventDefault();
-      el.dropArea.classList.add('dragover');
-    }));
-    ['dragleave', 'drop'].forEach(ev => el.dropArea.addEventListener(ev, e => {
-      e.preventDefault();
-      el.dropArea.classList.remove('dragover');
-    }));
-    el.dropArea.addEventListener('drop', e => {
-      if (e.dataTransfer.files && e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
-    });
+    initWindowFileDrop();
     el.fileInput.addEventListener('change', e => {
       if (e.target.files && e.target.files.length) handleFile(e.target.files[0]);
     });

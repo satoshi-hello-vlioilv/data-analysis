@@ -430,7 +430,9 @@
           </div>
           <div class="matrix-legend">
             <span><i class="legend-swatch legend-header" aria-hidden="true"></i>ヘッダー行</span>
-            <span><i class="legend-swatch legend-excluded" aria-hidden="true"></i>除外</span>
+            <span><i class="legend-swatch legend-data" aria-hidden="true"></i>データ</span>
+            <span><i class="legend-swatch legend-preamble" aria-hidden="true"></i>前置き（自動除外）</span>
+            <span><i class="legend-swatch legend-excluded" aria-hidden="true"></i>除外（手動）</span>
             <span><i class="legend-swatch legend-x" aria-hidden="true"></i>X軸</span>
             <span><i class="legend-swatch legend-series" aria-hidden="true"></i>系列（Y軸）</span>
           </div>
@@ -461,6 +463,19 @@
   <div class="toast" id="toast" role="status" aria-live="polite" hidden>
     <span class="toast-icon" id="toastIcon" aria-hidden="true"></span>
     <span id="toastMessage"></span>
+  </div>
+
+  <!-- 画面全体へのファイルドラッグ＆ドロップ用オーバーレイ（ドラッグ中のみ表示） -->
+  <div class="file-drop-overlay" id="fileDropOverlay" hidden aria-hidden="true">
+    <div class="file-drop-overlay-inner">
+      <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+        <polyline points="17 8 12 3 7 8"></polyline>
+        <line x1="12" y1="3" x2="12" y2="15"></line>
+      </svg>
+      <strong>ドロップしてファイルを読み込む</strong>
+      <small>CSV・TSV・XLSX・XLS に対応 — 画面のどこにドロップしてもOKです</small>
+    </div>
   </div>
 
   <!-- ライブラリ（同梱 — オフラインでも動作） -->
