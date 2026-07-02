@@ -250,7 +250,7 @@
     state.theme = theme;
     document.documentElement.dataset.theme = theme;
     document.documentElement.style.setProperty('--series-legend-color', Palette.seriesColor(theme, 0));
-    try { localStorage.setItem('gcs-theme', theme); } catch (e) { /* プライベートモード等 */ }
+    try { localStorage.setItem('chartlab-theme', theme); } catch (e) { /* プライベートモード等 */ }
     renderSeriesList();
     renderHistSeriesList();
     scheduleUpdate();
@@ -258,7 +258,7 @@
 
   function initTheme() {
     let saved = null;
-    try { saved = localStorage.getItem('gcs-theme'); } catch (e) { /* noop */ }
+    try { saved = localStorage.getItem('chartlab-theme'); } catch (e) { /* noop */ }
     const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
     state.theme = saved || (prefersDark ? 'dark' : 'light');
     document.documentElement.dataset.theme = state.theme;
