@@ -151,7 +151,7 @@
             </div>
           </details>
 
-          <details class="accordion" open>
+          <details class="accordion">
             <summary>クエリ（処理内容の写し）</summary>
             <div class="accordion-body">
               <div class="query-preview">
@@ -186,10 +186,13 @@
             <button type="button" data-mode="hist" aria-pressed="false">ヒストグラム</button>
           </div>
 
-          <div class="field metadata-hint" id="metadataHint" hidden>
-            <label>検出したメタデータ<small>（前置き行から抽出。クリックでタイトルなどに挿入）</small></label>
-            <div class="metadata-chips" id="metadataChips"></div>
-          </div>
+          <details class="accordion metadata-hint" id="metadataHint" hidden>
+            <summary>検出したメタデータ<span class="accordion-count" id="metadataCount" hidden>0</span></summary>
+            <div class="accordion-body">
+              <small class="metadata-desc">前置き行から抽出。クリックでタイトルなどに挿入</small>
+              <div class="metadata-chips" id="metadataChips"></div>
+            </div>
+          </details>
 
           <div class="field">
             <label for="chartTitleInput">グラフタイトル</label>

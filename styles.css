@@ -929,7 +929,15 @@ input.switch:checked::after { transform: translateX(14px); }
 
 /* --- 検出したメタデータ（前置き行）をラベルへ挿入するチップ --- */
 
-.metadata-hint label small { font-weight: 400; color: var(--muted); }
+.metadata-hint > summary { color: var(--accent); }
+
+.metadata-desc {
+  display: block;
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--muted);
+  margin-bottom: 8px;
+}
 
 .metadata-chips { display: flex; flex-wrap: wrap; gap: 6px; }
 

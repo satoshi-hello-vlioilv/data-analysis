@@ -132,6 +132,7 @@
 
     modeSegment: $('modeSegment'),
     metadataHint: $('metadataHint'),
+    metadataCount: $('metadataCount'),
     metadataChips: $('metadataChips'),
     chartTitleInput: $('chartTitleInput'),
     xySettings: $('xySettings'),
@@ -1116,6 +1117,8 @@
   function renderMetadataChips() {
     const lines = (state.raw.meta.metadataLines || []).filter(Boolean);
     el.metadataHint.hidden = lines.length === 0;
+    el.metadataCount.hidden = lines.length === 0;
+    el.metadataCount.textContent = String(lines.length);
     el.metadataChips.textContent = '';
     lines.forEach(line => {
       const chip = document.createElement('button');
