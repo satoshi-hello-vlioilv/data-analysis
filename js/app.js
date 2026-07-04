@@ -99,6 +99,7 @@
     matrixSetXBtn: $('matrixSetXBtn'),
     matrixAddSeriesBtn: $('matrixAddSeriesBtn'),
     matrixTable: $('matrixTable'),
+    matrixToChartBtn: $('matrixToChartBtn'),
 
     // ステッパー（ステップ切替タブ）
     stepTabData: $('stepTabData'),
@@ -140,6 +141,8 @@
     xAxisDropZone: $('xAxisDropZone'),
     xSelect: $('xSelect'),
     xHint: $('xHint'),
+    chartTypeField: $('chartTypeField'),
+    chartTypePicker: $('chartTypePicker'),
     seriesList: $('seriesList'),
     addSeriesBtn: $('addSeriesBtn'),
     stackedToggle: $('stackedToggle'),
@@ -216,6 +219,14 @@
     { id: 'area', label: '面' },
     { id: 'scatter', label: '散布' }
   ];
+
+  // 種類ピッカー用の形状アイコン（ヘッダーロゴと同じ stroke 線画の視覚言語）
+  const CHART_TYPE_ICONS = {
+    bar: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="6" y1="20" x2="6" y2="12"></line><line x1="12" y1="20" x2="12" y2="5"></line><line x1="18" y1="20" x2="18" y2="15"></line></svg>',
+    line: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="4 16 9 10 14 13 20 6"></polyline></svg>',
+    area: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 17 9 11 14 14 20 7 V20 H4 Z" fill="currentColor" opacity="0.22" stroke="none"></path><polyline points="4 17 9 11 14 14 20 7"></polyline></svg>',
+    scatter: '<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true"><circle cx="7" cy="15" r="2"></circle><circle cx="12" cy="9" r="2"></circle><circle cx="16" cy="14" r="2"></circle><circle cx="19" cy="6" r="2"></circle></svg>'
+  };
 
   function numericColumns() {
     return state.raw ? state.raw.columns.filter(c => c.type === 'number') : [];
@@ -999,6 +1010,15 @@
       }
     });
     el.openMatrixBtn.addEventListener('click', () => switchView('matrix'));
+
+    // 生データ確認 → 完成グラフへの明示的な導線。
+    // グラフ設定は読み込み時に smartDefaults() で完成しているのに、進む手がかりが
+    // ステッパーの色変化しかなかった（サンプル読込は自動でグラフへ飛ぶのに、
+    // 本命である手元ファイルの経路だけ最後の一押しが欠けていた）
+    el.matrixToChartBtn.addEventListener('click', () => {
+      switchStep('chart');
+      switchView('chart');
+    });
   }
 
   /**
@@ -1411,6 +1431,37 @@
     return wrap;
   }
 
+  /**
+   * グラフの種類ピッカー（単一系列時のみ表示）
+   * 「どんな形で見るか」は最重要の意思決定なので、形のアイコンで選べる
+   * 視覚セレクタを設定の最上部に出す。複数系列では種類を系列ごとに
+   * 混在できるため、各系列行の select に役割を引き継ぐ。
+   */
+  function renderChartTypePicker() {
+    const single = state.chart.series.length === 1;
+    el.chartTypeField.hidden = !single;
+    el.chartTypePicker.textContent = '';
+    if (!single) return;
+    const current = state.chart.series[0].type;
+    CHART_TYPES.forEach(t => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'chart-type-btn' + (t.id === current ? ' active' : '');
+      btn.setAttribute('aria-pressed', String(t.id === current));
+      btn.innerHTML = CHART_TYPE_ICONS[t.id];
+      const label = document.createElement('span');
+      label.textContent = t.label;
+      btn.appendChild(label);
+      btn.addEventListener('click', () => {
+        if (!state.chart.series.length || state.chart.series[0].type === t.id) return;
+        state.chart.series[0].type = t.id;
+        renderSeriesList();
+        scheduleUpdate();
+      });
+      el.chartTypePicker.appendChild(btn);
+    });
+  }
+
   /** XYモードの系列行 */
   function renderSeriesList() {
     if (!state.raw) return;
@@ -1418,6 +1469,7 @@
     const nums = numericColumns();
     const grouped = !!state.query.groupBy;
     const total = state.chart.series.length;
+    const single = total === 1;
 
     state.chart.series.forEach((series, idx) => {
       const row = document.createElement('div');
@@ -1473,11 +1525,17 @@
       mainLine.className = 'series-row-main';
       mainLine.append(handle, swatch, colPicker, removeBtn);
 
+      // 単一系列では種類は上部のアイコンピッカーが担い、並び替えも不要
+      // → 下段はグループ化中の集計選択があるときだけ出す
+      typeSel.hidden = single;
+      reorderBtns.hidden = single;
+
       const subLine = document.createElement('div');
       subLine.className = 'series-row-sub';
       subLine.append(aggSel, typeSel, reorderBtns);
 
-      row.append(mainLine, subLine);
+      row.append(mainLine);
+      if (grouped || !single) row.append(subLine);
       el.seriesList.appendChild(row);
     });
 
@@ -1485,6 +1543,7 @@
     el.addSeriesBtn.title = state.chart.series.length >= Palette.MAX_SERIES
       ? '系列は最大8つまでです（それ以上は「その他」への集約や複数グラフをご検討ください）'
       : '';
+    renderChartTypePicker();
     updateStepperBadges();
   }
 

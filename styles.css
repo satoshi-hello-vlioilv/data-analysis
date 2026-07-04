@@ -2,6 +2,8 @@
    Chart Lab — デザインシステム
    検証済みリファレンスパレット（js/palette.js と同一の値）をトークン化。
    ダークモードはライトの自動反転ではなく、暗い背景向けに選定した別ステップ。
+   例外: ライトの --muted のみ palette.js（グラフ目盛り用 #898781）より濃い。
+   UI のヒント文・プレースホルダーは「読むテキスト」なので AA（4.5:1）を確保する。
    ========================================================================== */
 
 :root {
@@ -11,7 +13,7 @@
   --surface-raised: #ffffff;
   --text-primary: #0b0b0b;
   --text-secondary: #52514e;
-  --muted: #898781;
+  --muted: #6b6a64;
   --grid: #e1e0d9;
   --axis: #c3c2b7;
   --border: rgba(11, 11, 11, 0.10);
@@ -182,7 +184,9 @@ button { font-family: inherit; }
   transition: background-color 0.15s ease, color 0.15s ease;
 }
 
-.stepper-tab:hover:not(:disabled) { background: var(--accent-wash); color: var(--accent); }
+/* ホバーは中立色にとどめる — accent-wash 背景は「選択中」専用にし、
+   ホバー中のタブが選択済みタブと見分けられなくなる問題を避ける */
+.stepper-tab:hover:not(:disabled):not(.active) { background: var(--grid); color: var(--text-primary); }
 
 .stepper-tab.active {
   background: var(--accent-wash);
@@ -355,6 +359,7 @@ button { font-family: inherit; }
   border-radius: 999px;
   font-size: 11.5px;
   max-width: 100%;
+  min-width: 0;
   cursor: grab;
   transition: border-color 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease;
 }
@@ -363,7 +368,9 @@ button { font-family: inherit; }
 .column-chip:active { cursor: grabbing; }
 .column-chip.dragging { opacity: 0.35; }
 
-.column-chip > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* min-width: 0 がないと flex の自動最小幅が効いて縮められず、
+   長い列名が「…」にならずサイドバー境界でそのまま切れてしまう */
+.column-chip > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .column-chip em {
   font-style: normal;
@@ -910,6 +917,44 @@ input.switch:checked::after { transform: translateX(14px); }
   box-shadow: 0 1px 3px rgba(11, 11, 11, 0.10);
 }
 
+/* グラフの種類ピッカー（単一系列時のみ表示）
+   種類の選択はグラフ作りの最重要の意思決定なので、テキストの select ではなく
+   形のアイコンで選ぶ視覚セレクタとして最上部に置く（再認は想起より速い）。
+   ホバー=枠線の濃化 / 選択=アクセント枠+ウォッシュ背景、と状態表現を分ける */
+.chart-type-picker {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 4px;
+}
+
+.chart-type-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 7px 4px 6px;
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  background: var(--surface);
+  border: 1px solid var(--axis);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: border-color 0.15s ease, background-color 0.15s ease, color 0.15s ease;
+}
+
+[data-theme="dark"] .chart-type-btn { background: var(--surface-raised); }
+
+.chart-type-btn svg { display: block; }
+.chart-type-btn:hover { border-color: var(--muted); }
+
+.chart-type-btn.active {
+  border-color: var(--accent);
+  background: var(--accent-wash);
+  color: var(--accent-strong);
+}
+
 /* チップボタン（基準線クイック追加） */
 .quick-refs { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
 
@@ -1319,6 +1364,18 @@ body.dnd-column-active .drop-zone.drop-reject {
 }
 
 .card-head h3 { font-size: 14.5px; font-weight: 700; }
+
+/* 見出しの右に主要アクション（CTA）を並べるカードヘッダー
+   — 生データ確認画面から完成グラフへの明示的な導線に使う */
+.card-head.with-cta {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.card-head.with-cta .btn { flex-shrink: 0; }
 
 .chart-meta {
   font-size: 11.5px;

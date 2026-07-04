@@ -200,6 +200,11 @@
           </div>
 
           <div id="xySettings">
+            <!-- 単一系列のとき: 種類を形（アイコン）で選ぶピッカー。複数系列では各系列行の select に切り替わる -->
+            <div class="field" id="chartTypeField" hidden>
+              <label id="chartTypeLabel">グラフの種類</label>
+              <div class="chart-type-picker" role="group" aria-labelledby="chartTypeLabel" id="chartTypePicker"></div>
+            </div>
             <div class="field drop-zone" id="xAxisDropZone">
               <label>X軸の列</label>
               <div class="col-picker-slot" id="xSelect"></div>
@@ -451,9 +456,13 @@
 
         <!-- 生データマトリクス（複雑な形式の取り込み調整） -->
         <section class="card matrix-card" id="matrixCard" hidden aria-label="生データマトリクス">
-          <div class="card-head">
-            <h3>生データマトリクス</h3>
-            <p class="chart-meta" id="matrixNote">セルをドラッグして範囲を選択し、下のボタンで役割を割り当てます</p>
+          <div class="card-head with-cta">
+            <div>
+              <h3>生データマトリクス</h3>
+              <p class="chart-meta" id="matrixNote">セルをドラッグして範囲を選択し、下のボタンで役割を割り当てます</p>
+            </div>
+            <!-- グラフ設定は読み込み時に自動生成済み — 確認が済んだらワンクリックで完成グラフへ -->
+            <button type="button" class="btn" id="matrixToChartBtn">この内容でグラフを見る →</button>
           </div>
           <div class="matrix-legend">
             <span><i class="legend-swatch legend-header" aria-hidden="true"></i>ヘッダー行</span>
