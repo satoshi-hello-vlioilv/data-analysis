@@ -15,6 +15,9 @@
 (() => {
   'use strict';
 
+  // アプリのバージョン（単一の情報源）。変更内容は CHANGELOG.md に対応するエントリを追記する。
+  const APP_VERSION = '1.2.0';
+
   const $ = id => document.getElementById(id);
 
   // ---------------------------------------------------------------
@@ -68,6 +71,7 @@
   // ---------------------------------------------------------------
 
   const el = {
+    brandVersion: $('brandVersion'),
     themeToggle: $('themeToggle'),
     sampleGrid: $('sampleGrid'),
     emptySampleGrid: $('emptySampleGrid'),
@@ -2698,6 +2702,7 @@
   // ---------------------------------------------------------------
 
   function init() {
+    el.brandVersion.textContent = 'v' + APP_VERSION;
     initTheme();
     renderSampleGrids();
     populateSortSelect();
