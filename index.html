@@ -3,126 +3,266 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="description" content="CSVやExcelファイルから棒・折れ線・面・散布図・ヒストグラムを自由に組み合わせて作成できる汎用グラフ作成ツール。フィルタ・グループ化・集計をクエリとして可視化します。">
+  <meta name="description" content="CSVやExcelファイルを読み込むと、データの形に合わせたおすすめのグラフがすぐに表示される汎用グラフ作成ツール。棒・折れ線・面・散布図・ヒストグラムを文章のように組み立てて調整できます。">
   <title>Chart Lab — 汎用データ可視化ツール</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%232a78d6' stroke-width='2' stroke-linecap='round'%3E%3Cline x1='18' y1='20' x2='18' y2='10'/%3E%3Cline x1='12' y1='20' x2='12' y2='4'/%3E%3Cline x1='6' y1='20' x2='6' y2='14'/%3E%3Cpath d='M3 20h18'/%3E%3C/svg%3E">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <div class="app">
+  <div class="app" id="app" data-mode="xy">
+
+    <!-- ============ 上部アプリバー: ブランド | ビュー切替 | ファイル・出力・テーマ ============ -->
     <header class="app-header">
       <div class="brand">
-        <svg class="brand-mark" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <svg class="brand-mark" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <line x1="18" y1="20" x2="18" y2="10"></line>
           <line x1="12" y1="20" x2="12" y2="4"></line>
           <line x1="6" y1="20" x2="6" y2="14"></line>
           <path d="M3 20h18"></path>
         </svg>
-        <div class="brand-text">
-          <h1>Chart Lab <span class="brand-version" id="brandVersion" title="変更履歴は CHANGELOG.md を参照"></span></h1>
-          <p>CSV・Excel からグラフを作成・分析できる汎用可視化ツール</p>
+        <h1>Chart Lab <span class="brand-version" id="brandVersion" title="変更履歴は CHANGELOG.md を参照"></span></h1>
+      </div>
+
+      <div class="header-center">
+        <div class="tabs" role="tablist" aria-label="表示切替" id="viewTabs" hidden>
+          <button type="button" class="tab active" role="tab" aria-selected="true" data-view="chart">グラフ</button>
+          <button type="button" class="tab" role="tab" aria-selected="false" data-view="table">テーブル</button>
+          <button type="button" class="tab" role="tab" aria-selected="false" data-view="stats">統計</button>
+          <button type="button" class="tab" role="tab" aria-selected="false" data-view="matrix" id="matrixTab" hidden>生データ</button>
         </div>
       </div>
-      <button type="button" class="icon-btn" id="themeToggle" aria-label="ライト / ダークテーマを切り替え" title="テーマ切替">
-        <svg class="icon-sun" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <circle cx="12" cy="12" r="5"></circle>
-          <line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line>
-          <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
-          <line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line>
-          <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
-        </svg>
-        <svg class="icon-moon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
-        </svg>
-      </button>
+
+      <div class="header-actions">
+        <span class="privacy-note" id="privacyNote">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="11" width="16" height="10" rx="2"></rect><path d="M8 11V7a4 4 0 0 1 8 0v4"></path></svg>
+          ブラウザ内で処理・外部送信なし
+        </span>
+        <div class="file-info" id="fileInfo" hidden>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+            <polyline points="14 2 14 8 20 8"></polyline>
+          </svg>
+          <div class="file-info-text">
+            <span id="fileInfoName"></span>
+            <small id="fileInfoDetail"></small>
+          </div>
+          <button type="button" class="icon-btn xs" id="removeFileBtn" aria-label="データを閉じる" title="データを閉じる">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
+          </button>
+        </div>
+        <div class="export-actions" id="exportActions" hidden>
+          <button type="button" class="btn ghost sm" id="downloadPngBtn">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+              <polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line>
+            </svg>
+            PNG保存
+          </button>
+          <button type="button" class="btn ghost sm" id="exportCsvBtn">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+              <polyline points="14 2 14 8 20 8"></polyline>
+            </svg>
+            CSV出力
+          </button>
+        </div>
+        <button type="button" class="icon-btn" id="themeToggle" aria-label="ライト / ダークテーマを切り替え" title="テーマ切替">
+          <svg class="icon-sun" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="12" cy="12" r="5"></circle>
+            <line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line>
+            <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+            <line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line>
+            <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+          </svg>
+          <svg class="icon-moon" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+          </svg>
+        </button>
+      </div>
     </header>
 
-    <div class="layout">
-      <!-- ============ 左: コントロールパネル ============ -->
-      <aside class="sidebar">
+    <main class="main" id="main">
 
-        <!-- ステップナビゲーション（タブ切替・完了状況を表示） -->
-        <nav class="stepper" role="tablist" aria-label="作業ステップ">
-          <button type="button" class="stepper-tab active" role="tab" aria-selected="true" aria-controls="stepDataPanel" id="stepTabData" data-step="data">
-            <span class="stepper-badge" id="stepDataBadge">1</span>
-            <span class="stepper-label">データ</span>
-          </button>
-          <button type="button" class="stepper-tab" role="tab" aria-selected="false" aria-controls="stepQuery" id="stepTabQuery" data-step="query" disabled>
-            <span class="stepper-badge">2</span>
-            <span class="stepper-label">処理</span>
-            <span class="stepper-count" id="queryStepCount" hidden>0</span>
-          </button>
-          <button type="button" class="stepper-tab" role="tab" aria-selected="false" aria-controls="stepChart" id="stepTabChart" data-step="chart" disabled>
-            <span class="stepper-badge">3</span>
-            <span class="stepper-label">グラフ</span>
-            <span class="stepper-count" id="chartStepCount" hidden>0</span>
-          </button>
-        </nav>
-
-        <!-- 検出した列（全ステップ共通・常時表示） — ドラッグしてX軸・グループ化・系列に割り当て -->
-        <div class="column-summary" id="columnSummary" hidden>
-          <span class="column-summary-title">検出した列<small>（ドラッグしてX軸・グループ化・系列に設定できます）</small></span>
-          <div class="column-chips" id="columnChips"></div>
-        </div>
-
-        <!-- ステップ1: データ -->
-        <section class="step-panel" id="stepDataPanel" role="tabpanel" aria-labelledby="stepTabData">
-          <p class="step-hint">サンプルで試すか、手元のファイルを読み込みます</p>
-          <div class="sample-grid" id="sampleGrid"></div>
+      <!-- ============ 初回画面（データ未読込）— 入口はここ1か所 ============ -->
+      <section class="empty-state" id="emptyState">
+        <div class="empty-state-inner">
+          <div class="empty-hero">
+            <div class="empty-hero-icon">
+              <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <line x1="18" y1="20" x2="18" y2="10"></line>
+                <line x1="12" y1="20" x2="12" y2="4"></line>
+                <line x1="6" y1="20" x2="6" y2="14"></line>
+                <path d="M3 20h18"></path>
+              </svg>
+            </div>
+            <div class="empty-hero-text">
+              <h2>データを読み込んでグラフを作成</h2>
+              <p>CSV・Excel を読み込むと、データの形に合わせた<strong>おすすめのグラフ</strong>がすぐに表示されます。<br>あとは「売上高 を 月 ごとに 折れ線 で表示」のような文章を、言葉を選び替えて調整するだけです。</p>
+            </div>
+          </div>
 
           <div class="drop-area" id="dropArea" role="button" tabindex="0" aria-label="CSVまたはExcelファイルを選択（ドラッグ＆ドロップ対応）">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
               <polyline points="17 8 12 3 7 8"></polyline>
               <line x1="12" y1="3" x2="12" y2="15"></line>
             </svg>
             <div>
               <strong>ファイルをドロップ / クリックして選択</strong>
-              <small>CSV・TSV・XLSX・XLS に対応</small>
+              <small>CSV・TSV・XLSX・XLS に対応 — 画面のどこにドロップしてもOK</small>
             </div>
             <input type="file" id="fileInput" accept=".csv,.tsv,.txt,.xls,.xlsx" hidden>
           </div>
 
-          <div class="file-info" id="fileInfo" hidden>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-              <polyline points="14 2 14 8 20 8"></polyline>
-            </svg>
-            <div class="file-info-text">
-              <span id="fileInfoName"></span>
-              <small id="fileInfoDetail"></small>
+          <div class="empty-section">
+            <h3 class="empty-section-title">サンプルデータで試す</h3>
+            <div class="sample-grid wide" id="emptySampleGrid"></div>
+          </div>
+
+          <p class="empty-footnote">対応するグラフ: 棒・折れ線・面・散布図・ヒストグラム（種類の混在も可）／ データはすべてブラウザ内で処理され、外部には送信されません</p>
+        </div>
+      </section>
+
+      <!-- ============ 操作カード: おすすめ（選ぶ）＋ 文章（主要設定）＋ 詳細設定の入口 ============ -->
+      <section class="control-card" id="controlCard" hidden aria-label="グラフの設定">
+        <div class="control-row recs-row" id="recsRow">
+          <span class="control-label" id="recsLabel">おすすめ</span>
+          <div class="recs" id="recsList" role="group" aria-labelledby="recsLabel"></div>
+        </div>
+
+        <div class="control-row compose-row">
+          <div class="segmented mode-switch" role="group" aria-label="グラフの目的" id="modeSegment">
+            <button type="button" data-mode="xy" class="active" aria-pressed="true">値を比べる</button>
+            <button type="button" data-mode="hist" aria-pressed="false">分布を見る</button>
+          </div>
+
+          <!-- XY: 「[値] を [X軸] (まとめて集計) ごとに [種類] で表示」 -->
+          <div class="sentence xy-only" id="xySentence" aria-label="グラフの組み立て">
+            <div class="series-list drop-zone" id="seriesList" aria-label="表示する値（Y軸）"></div>
+            <span class="word">を</span>
+            <div class="x-control drop-zone" id="xAxisDropZone" aria-label="X軸">
+              <div class="col-picker-slot" id="xSelect"></div>
+              <button type="button" class="aggregate-chip" id="aggregateToggle" aria-pressed="false"></button>
             </div>
-            <button type="button" class="icon-btn sm" id="removeFileBtn" aria-label="データを削除">
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line>
-              </svg>
+            <span class="word" id="xConnector">ごとに</span>
+            <div class="chart-type-picker" id="chartTypePicker" role="group" aria-label="グラフの種類"></div>
+            <span class="word" id="typeWord">で表示</span>
+            <button type="button" class="btn ghost sm" id="addSeriesBtn">＋ 比べる値</button>
+          </div>
+
+          <!-- 分布: 「[列] の分布を [階級の決め方] で表示」 -->
+          <div class="sentence hist-only" id="histSentence" aria-label="分布の組み立て">
+            <div class="series-list drop-zone" id="histSeriesList" aria-label="分布を見る列"></div>
+            <span class="word">の分布を</span>
+            <select id="binMethodSelect" aria-label="階級の決め方">
+              <option value="sturges">スタージェスの公式（標準）</option>
+              <option value="scott">スコットの方法（正規分布向き）</option>
+              <option value="freedman">フリードマン・ダイアコニス（外れ値に強い）</option>
+              <option value="custom">階級数を指定</option>
+            </select>
+            <span class="bin-count" id="binCountField" hidden>
+              <input type="range" id="binCountRange" min="2" max="100" value="10" aria-label="階級数">
+              <output id="binCountOut">10</output>
+            </span>
+            <span class="word">で表示</span>
+            <button type="button" class="btn ghost sm" id="addHistSeriesBtn">＋ 重ねる列</button>
+          </div>
+
+          <button type="button" class="tool-btn" id="detailToggle" aria-expanded="false" aria-controls="detailPanel">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"></rect><line x1="15" y1="4" x2="15" y2="20"></line></svg>
+            詳細設定
+            <span class="count-badge" id="detailBadge" hidden>0</span>
+          </button>
+        </div>
+      </section>
+
+      <!-- ============ 作業領域: ビュー（グラフ／テーブル／統計／生データ）＋ グラフを隠さず横に開く詳細パネル ============ -->
+      <div class="workspace" id="workspace" hidden>
+        <div class="views">
+          <!-- グラフビュー -->
+          <figure class="card chart-card" id="chartCard">
+            <figcaption class="card-head">
+              <h3 id="chartTitle">グラフ</h3>
+              <p class="chart-meta" id="chartMeta"></p>
+            </figcaption>
+            <div class="chart-body" id="chartBody">
+              <canvas id="chartCanvas" role="img" aria-label="グラフ。ドラッグで範囲を絞り込めます。同じ内容はテーブルタブで表として確認できます"></canvas>
+              <div class="chart-zoom-box" id="chartZoomBox" hidden></div>
+              <button type="button" class="chart-zoom-reset" id="chartZoomResetBtn" hidden>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                表示範囲をリセット
+              </button>
+              <p class="chart-notice" id="chartNotice" hidden></p>
+            </div>
+          </figure>
+
+          <!-- テーブルビュー（グラフと同じ内容の表 = アクセシブルな等価表示） -->
+          <section class="card table-card" id="tableCard" hidden aria-label="データテーブル">
+            <div class="card-head">
+              <h3>テーブル</h3>
+              <p class="chart-meta" id="tableNote"></p>
+            </div>
+            <div class="table-scroll" tabindex="0">
+              <table id="dataTable"></table>
+            </div>
+          </section>
+
+          <!-- 統計ビュー -->
+          <section class="card stats-card" id="statsCard" hidden aria-label="統計情報">
+            <div class="card-head">
+              <h3>統計</h3>
+              <p class="chart-meta" id="statsNote"></p>
+            </div>
+            <div id="statsContent"></div>
+          </section>
+
+          <!-- 生データマトリクス（複雑な形式の取り込み調整） -->
+          <section class="card matrix-card" id="matrixCard" hidden aria-label="生データマトリクス">
+            <div class="card-head with-cta">
+              <div>
+                <h3>生データマトリクス</h3>
+                <p class="chart-meta" id="matrixNote">セルをドラッグして範囲を選択し、下のボタンで役割を割り当てます</p>
+              </div>
+              <!-- グラフ設定は読み込み時に自動生成済み — 確認が済んだらワンクリックで完成グラフへ -->
+              <button type="button" class="btn" id="matrixToChartBtn">この内容でグラフを見る →</button>
+            </div>
+            <div class="matrix-legend">
+              <span><i class="legend-swatch legend-header" aria-hidden="true"></i>ヘッダー行</span>
+              <span><i class="legend-swatch legend-data" aria-hidden="true"></i>データ</span>
+              <span><i class="legend-swatch legend-preamble" aria-hidden="true"></i>前置き（自動除外）</span>
+              <span><i class="legend-swatch legend-excluded" aria-hidden="true"></i>除外（手動）</span>
+              <span><i class="legend-swatch legend-x" aria-hidden="true"></i>X軸</span>
+              <span><i class="legend-swatch legend-series" aria-hidden="true"></i>系列（Y軸）</span>
+            </div>
+            <div class="matrix-toolbar" id="matrixToolbar">
+              <span class="matrix-selection-label" id="matrixSelectionLabel">セルをドラッグ、または列見出しをクリックして範囲を選択してください</span>
+              <div class="matrix-toolbar-actions">
+                <button type="button" class="btn ghost sm" id="matrixSetHeaderBtn" disabled>ヘッダー行に設定</button>
+                <button type="button" class="btn ghost sm" id="matrixSetDataStartBtn" disabled>データ開始行に設定</button>
+                <button type="button" class="btn ghost sm" id="matrixExcludeBtn" disabled>この範囲を除外</button>
+                <button type="button" class="btn ghost sm" id="matrixIncludeBtn" disabled>除外を解除</button>
+                <span class="matrix-toolbar-sep" aria-hidden="true"></span>
+                <button type="button" class="btn ghost sm" id="matrixSetXBtn" disabled>X軸に設定</button>
+                <button type="button" class="btn ghost sm" id="matrixAddSeriesBtn" disabled>系列(Y軸)に追加</button>
+              </div>
+            </div>
+            <div class="matrix-scroll" tabindex="0">
+              <table id="matrixTable" class="import-preview-table matrix-table"></table>
+            </div>
+          </section>
+        </div>
+
+        <!-- 詳細設定（補助情報）— グラフに重ねず横に開き、項目ごとに折りたたむ -->
+        <aside class="detail-panel" id="detailPanel" hidden aria-label="詳細設定">
+          <div class="detail-head">
+            <h2>詳細設定</h2>
+            <button type="button" class="icon-btn sm" id="detailCloseBtn" aria-label="詳細設定を閉じる">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
             </button>
           </div>
 
-          <details class="accordion import-adjust" id="importAdjust" hidden>
-            <summary id="importSummary">取り込み設定を調整</summary>
-            <div class="accordion-body">
-              <p class="import-adjust-hint">前置きの注記行や複数箇所の除外など複雑な形式は、メイン画面の「生データ」タブでセルをドラッグ選択して調整できます。</p>
-              <div class="import-row-fields">
-                <div class="field">
-                  <label for="importHeaderRow">ヘッダー行<small>（0=ヘッダーなし）</small></label>
-                  <input type="number" id="importHeaderRow" min="0" step="1" inputmode="numeric">
-                </div>
-                <div class="field">
-                  <label for="importDataStartRow">データ開始行</label>
-                  <input type="number" id="importDataStartRow" min="1" step="1" inputmode="numeric">
-                </div>
-              </div>
-              <div class="import-row-fields">
-                <button type="button" class="btn ghost sm" id="importAutoBtn">自動検出に戻す</button>
-                <button type="button" class="btn sm" id="openMatrixBtn">生データを表示して調整 →</button>
-              </div>
-            </div>
-          </details>
-        </section>
-
-        <!-- ステップ2: データ処理（クエリ） -->
-        <section class="step-panel" id="stepQuery" role="tabpanel" aria-labelledby="stepTabQuery" hidden>
           <details class="accordion" id="filterAccordion" open>
             <summary>フィルタ<span class="accordion-count" id="filterCount" hidden>0</span></summary>
             <div class="accordion-body">
@@ -131,98 +271,14 @@
             </div>
           </details>
 
-          <details class="accordion" open>
-            <summary>集計・並び替え</summary>
+          <details class="accordion" id="axisAccordion">
+            <summary>軸・表示範囲</summary>
             <div class="accordion-body">
-              <div class="field drop-zone" id="groupByDropZone">
-                <label>グループ化して集計</label>
-                <div class="col-picker-slot" id="groupBySelect"></div>
-              </div>
-              <div class="field-row">
-                <div class="field">
-                  <label for="sortSelect">並び替え</label>
-                  <select id="sortSelect"></select>
-                </div>
-                <div class="field">
-                  <label for="limitInput">行数上限</label>
-                  <input type="number" id="limitInput" min="1" step="1" placeholder="すべて" inputmode="numeric">
-                </div>
-              </div>
-            </div>
-          </details>
-
-          <details class="accordion">
-            <summary>クエリ（処理内容の写し）</summary>
-            <div class="accordion-body">
-              <div class="query-preview">
-                <div class="query-preview-head">
-                  <span>SQL風プレビュー</span>
-                  <button type="button" class="btn ghost sm" id="copyQueryBtn">コピー</button>
-                </div>
-                <pre><code id="queryCode"></code></pre>
-              </div>
-            </div>
-          </details>
-
-          <details class="accordion" id="presetAccordion">
-            <summary>プリセット<span class="accordion-count" id="presetCount" hidden>0</span></summary>
-            <div class="accordion-body">
-              <p class="import-adjust-hint">ヘッダー行・除外行・フィルタ・グラフ設定など、ここまでの処理内容をまとめて保存し、次回や似た形式の別ファイルに使い回せます。</p>
-              <div class="preset-save-row">
-                <input type="text" id="presetNameInput" placeholder="プリセット名（例: 月次売上レポート）" maxlength="60">
-                <button type="button" class="btn sm" id="savePresetBtn">現在の設定を保存</button>
-              </div>
-              <div class="preset-list" id="presetList"></div>
-              <button type="button" class="btn ghost sm" id="importPresetBtn">ファイルからプリセットを読み込む</button>
-              <input type="file" id="presetFileInput" accept=".json,application/json" hidden>
-            </div>
-          </details>
-        </section>
-
-        <!-- ステップ3: グラフ -->
-        <section class="step-panel" id="stepChart" role="tabpanel" aria-labelledby="stepTabChart" hidden>
-          <div class="segmented" role="group" aria-label="グラフモード" id="modeSegment">
-            <button type="button" data-mode="xy" class="active" aria-pressed="true">XYグラフ</button>
-            <button type="button" data-mode="hist" aria-pressed="false">ヒストグラム</button>
-          </div>
-
-          <details class="accordion metadata-hint" id="metadataHint" hidden>
-            <summary>検出したメタデータ<span class="accordion-count" id="metadataCount" hidden>0</span></summary>
-            <div class="accordion-body">
-              <small class="metadata-desc">前置き行から抽出。クリックでタイトルなどに挿入</small>
-              <div class="metadata-chips" id="metadataChips"></div>
-            </div>
-          </details>
-
-          <div class="field">
-            <label for="chartTitleInput">グラフタイトル</label>
-            <input type="text" id="chartTitleInput" placeholder="自動生成されたタイトルを使用">
-          </div>
-
-          <div id="xySettings">
-            <!-- 単一系列のとき: 種類を形（アイコン）で選ぶピッカー。複数系列では各系列行の select に切り替わる -->
-            <div class="field" id="chartTypeField" hidden>
-              <label id="chartTypeLabel">グラフの種類</label>
-              <div class="chart-type-picker" role="group" aria-labelledby="chartTypeLabel" id="chartTypePicker"></div>
-            </div>
-            <div class="field drop-zone" id="xAxisDropZone">
-              <label>X軸の列</label>
-              <div class="col-picker-slot" id="xSelect"></div>
-              <small id="xHint" hidden>グループ化中はグループ列がX軸になります</small>
-            </div>
-            <div class="field">
-              <label>系列（Y軸の列 / 種類を混在可・最大8）</label>
-              <div class="series-list drop-zone" id="seriesList"></div>
-              <button type="button" class="btn ghost sm" id="addSeriesBtn">＋ 系列を追加</button>
-            </div>
-            <label class="toggle-row">
-              <span>積み上げ表示（棒・面）</span>
-              <input type="checkbox" id="stackedToggle" class="switch">
-            </label>
-
-            <details class="accordion axis-adjust">
-              <summary>表示範囲・軸ラベルを調整</summary>
-              <div class="accordion-body">
+              <div class="xy-only">
+                <label class="toggle-row">
+                  <span>積み上げ表示（棒・面）</span>
+                  <input type="checkbox" id="stackedToggle" class="switch">
+                </label>
                 <div class="field-row">
                   <div class="field">
                     <label for="xLabelInput">X軸ラベル</label>
@@ -233,33 +289,30 @@
                     <input type="text" id="yLabelInput" placeholder="自動">
                   </div>
                 </div>
-
                 <div class="field range-field">
                   <div class="range-field-head">
                     <label>Y軸の表示範囲</label>
                     <button type="button" class="link-btn" data-reset="xyY">自動に戻す</button>
                   </div>
                   <div class="range-inputs">
-                    <input type="number" id="yRangeMin" placeholder="自動" step="any">
+                    <input type="number" id="yRangeMin" placeholder="自動" step="any" aria-label="Y軸の最小値">
                     <span>〜</span>
-                    <input type="number" id="yRangeMax" placeholder="自動" step="any">
+                    <input type="number" id="yRangeMax" placeholder="自動" step="any" aria-label="Y軸の最大値">
                   </div>
                   <small id="yRangeHint"></small>
                 </div>
-
                 <div class="field range-field" id="xRangeNumericField" hidden>
                   <div class="range-field-head">
                     <label>X軸の表示範囲</label>
                     <button type="button" class="link-btn" data-reset="xyX">自動に戻す</button>
                   </div>
                   <div class="range-inputs">
-                    <input type="number" id="xRangeMin" placeholder="自動" step="any">
+                    <input type="number" id="xRangeMin" placeholder="自動" step="any" aria-label="X軸の最小値">
                     <span>〜</span>
-                    <input type="number" id="xRangeMax" placeholder="自動" step="any">
+                    <input type="number" id="xRangeMax" placeholder="自動" step="any" aria-label="X軸の最大値">
                   </div>
                   <small id="xRangeHint"></small>
                 </div>
-
                 <div class="field range-field" id="xIndexRangeField" hidden>
                   <div class="range-field-head">
                     <label>表示するデータ範囲</label>
@@ -277,36 +330,12 @@
                   </div>
                 </div>
               </div>
-            </details>
-          </div>
 
-          <div id="histSettings" hidden>
-            <div class="field">
-              <label>対象列（数値・重ねて比較可）</label>
-              <div class="series-list drop-zone" id="histSeriesList"></div>
-              <button type="button" class="btn ghost sm" id="addHistSeriesBtn">＋ 列を追加</button>
-            </div>
-            <div class="field">
-              <label for="binMethodSelect">階級の決め方</label>
-              <select id="binMethodSelect">
-                <option value="sturges">スタージェスの公式（標準）</option>
-                <option value="scott">スコットの方法（正規分布向き）</option>
-                <option value="freedman">フリードマン・ダイアコニス（外れ値に強い）</option>
-                <option value="custom">カスタム（階級数を指定）</option>
-              </select>
-            </div>
-            <div class="field" id="binCountField" hidden>
-              <label for="binCountRange">階級数: <output id="binCountOut">10</output></label>
-              <input type="range" id="binCountRange" min="2" max="100" value="10">
-            </div>
-            <label class="toggle-row">
-              <span>正規分布カーブを重ねる</span>
-              <input type="checkbox" id="normalCurveToggle" class="switch">
-            </label>
-
-            <details class="accordion axis-adjust">
-              <summary>表示範囲・軸ラベルを調整</summary>
-              <div class="accordion-body">
+              <div class="hist-only">
+                <label class="toggle-row">
+                  <span>正規分布カーブを重ねる</span>
+                  <input type="checkbox" id="normalCurveToggle" class="switch">
+                </label>
                 <div class="field-row">
                   <div class="field">
                     <label for="histXLabelInput">値軸ラベル（X）</label>
@@ -317,34 +346,32 @@
                     <input type="text" id="histYLabelInput" placeholder="度数">
                   </div>
                 </div>
-
                 <div class="field range-field">
                   <div class="range-field-head">
                     <label>値の表示範囲（階級の元になる範囲）</label>
                     <button type="button" class="link-btn" data-reset="histValue">自動に戻す</button>
                   </div>
                   <div class="range-inputs">
-                    <input type="number" id="histValueMin" placeholder="自動" step="any">
+                    <input type="number" id="histValueMin" placeholder="自動" step="any" aria-label="値の最小値">
                     <span>〜</span>
-                    <input type="number" id="histValueMax" placeholder="自動" step="any">
+                    <input type="number" id="histValueMax" placeholder="自動" step="any" aria-label="値の最大値">
                   </div>
                   <small id="histValueHint"></small>
                 </div>
-
                 <div class="field range-field">
                   <div class="range-field-head">
                     <label>度数の表示範囲（Y軸）</label>
                     <button type="button" class="link-btn" data-reset="histFreq">自動に戻す</button>
                   </div>
                   <div class="range-inputs">
-                    <input type="number" id="histFreqMin" placeholder="自動" step="any">
+                    <input type="number" id="histFreqMin" placeholder="自動" step="any" aria-label="度数の最小値">
                     <span>〜</span>
-                    <input type="number" id="histFreqMax" placeholder="自動" step="any">
+                    <input type="number" id="histFreqMax" placeholder="自動" step="any" aria-label="度数の最大値">
                   </div>
                 </div>
               </div>
-            </details>
-          </div>
+            </div>
+          </details>
 
           <details class="accordion" id="refLineAccordion">
             <summary>基準線（平均・管理限界など）<span class="accordion-count" id="refLineCount" hidden>0</span></summary>
@@ -357,143 +384,100 @@
                 <button type="button" class="chip-btn" data-ref="m3s">−3σ</button>
                 <button type="button" class="chip-btn" data-ref="custom">＋ 任意の値</button>
               </div>
-              <small>最初の系列の値から計算されます。値は後から編集できます</small>
+              <small class="panel-note">最初の系列の値から計算されます。値は後から編集できます</small>
             </div>
           </details>
-        </section>
-      </aside>
 
-      <!-- ============ 右: 可視化エリア ============ -->
-      <main class="content">
-        <div class="content-toolbar" id="contentToolbar" hidden>
-          <div class="tabs" role="tablist" aria-label="表示切替">
-            <button type="button" class="tab active" role="tab" aria-selected="true" data-view="chart">グラフ</button>
-            <button type="button" class="tab" role="tab" aria-selected="false" data-view="table">テーブル</button>
-            <button type="button" class="tab" role="tab" aria-selected="false" data-view="stats">統計</button>
-            <button type="button" class="tab" role="tab" aria-selected="false" data-view="matrix" id="matrixTab" hidden>生データ</button>
-          </div>
-          <div class="toolbar-actions">
-            <button type="button" class="btn ghost sm" id="downloadPngBtn">
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                <polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line>
-              </svg>
-              PNG保存
-            </button>
-            <button type="button" class="btn ghost sm" id="exportCsvBtn">
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-                <polyline points="14 2 14 8 20 8"></polyline>
-              </svg>
-              CSV出力
-            </button>
-          </div>
-        </div>
-
-        <!-- 空の状態（導入画面） -->
-        <div class="empty-state" id="emptyState">
-          <div class="empty-state-inner">
-            <div class="empty-hero">
-              <div class="empty-hero-icon">
-                <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                  <line x1="18" y1="20" x2="18" y2="10"></line>
-                  <line x1="12" y1="20" x2="12" y2="4"></line>
-                  <line x1="6" y1="20" x2="6" y2="14"></line>
-                  <path d="M3 20h18"></path>
-                </svg>
+          <details class="accordion" id="formatAccordion">
+            <summary>タイトル・並び替え</summary>
+            <div class="accordion-body">
+              <div class="field">
+                <label for="chartTitleInput">グラフタイトル</label>
+                <input type="text" id="chartTitleInput" placeholder="自動生成されたタイトルを使用">
               </div>
-              <div class="empty-hero-text">
-                <h2>データを読み込んでグラフを作成</h2>
-                <p>サンプルを選ぶか、手元のCSV・Excelを読み込むとすぐに始められます。<br>データを選ぶ → 処理を調整 → グラフを仕上げる、の3ステップです。</p>
+              <div class="metadata-hint" id="metadataHint" hidden>
+                <span class="metadata-desc">ファイルの前置き行から検出した情報<span class="accordion-count" id="metadataCount" hidden>0</span> — クリックでタイトルや軸ラベルに挿入</span>
+                <div class="metadata-chips" id="metadataChips"></div>
+              </div>
+              <div class="field-row">
+                <div class="field">
+                  <label for="sortSelect">並び替え</label>
+                  <select id="sortSelect"></select>
+                </div>
+                <div class="field">
+                  <label for="limitInput">行数上限</label>
+                  <input type="number" id="limitInput" min="1" step="1" placeholder="すべて" inputmode="numeric">
+                </div>
               </div>
             </div>
+          </details>
 
-            <div class="empty-section">
-              <h3 class="empty-section-title">サンプルデータで試す</h3>
-              <div class="sample-grid wide" id="emptySampleGrid"></div>
+          <details class="accordion" id="dataAccordion">
+            <summary>データ・取り込み</summary>
+            <div class="accordion-body">
+              <div class="column-summary" id="columnSummary" hidden>
+                <span class="column-summary-title">検出した列 <small>— ドラッグして「値」や「X軸」に入れられます</small></span>
+                <div class="column-chips" id="columnChips"></div>
+              </div>
+
+              <div class="import-adjust" id="importAdjust" hidden>
+                <p class="import-status" id="importSummary"></p>
+                <div class="import-row-fields">
+                  <div class="field">
+                    <label for="importHeaderRow">ヘッダー行<small>（0=ヘッダーなし）</small></label>
+                    <input type="number" id="importHeaderRow" min="0" step="1" inputmode="numeric">
+                  </div>
+                  <div class="field">
+                    <label for="importDataStartRow">データ開始行</label>
+                    <input type="number" id="importDataStartRow" min="1" step="1" inputmode="numeric">
+                  </div>
+                </div>
+                <div class="import-row-fields">
+                  <button type="button" class="btn ghost sm" id="importAutoBtn">自動検出に戻す</button>
+                  <button type="button" class="btn sm" id="openMatrixBtn">生データを表示して調整 →</button>
+                </div>
+                <p class="panel-note">前置きの注記行や複数箇所の除外など複雑な形式は、「生データ」タブでセルをドラッグ選択して調整できます。</p>
+              </div>
+
+              <button type="button" class="btn ghost sm" id="reopenFileBtn">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+                別のファイルを開く
+              </button>
+              <p class="panel-subtitle">サンプルに切り替える</p>
+              <div class="sample-grid" id="sampleGrid"></div>
+              <p class="panel-note">データはすべてブラウザ内で処理され、外部には送信されません。</p>
             </div>
+          </details>
 
-            <p class="empty-footnote">対応するグラフ: 棒・折れ線・面・散布図・ヒストグラム（種類の混在も可）</p>
-          </div>
-        </div>
-
-        <!-- グラフビュー -->
-        <figure class="card chart-card" id="chartCard" hidden>
-          <figcaption class="card-head">
-            <h3 id="chartTitle">グラフ</h3>
-            <p class="chart-meta" id="chartMeta"></p>
-          </figcaption>
-          <div class="chart-body" id="chartBody">
-            <canvas id="chartCanvas" role="img" aria-label="グラフ。ドラッグで範囲を絞り込めます。同じ内容はテーブルタブで表として確認できます"></canvas>
-            <div class="chart-zoom-box" id="chartZoomBox" hidden></div>
-            <button type="button" class="chart-zoom-reset" id="chartZoomResetBtn" hidden>
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-              表示範囲をリセット
-            </button>
-            <p class="chart-notice" id="chartNotice" hidden></p>
-          </div>
-        </figure>
-
-        <!-- テーブルビュー（グラフと同じ内容の表 = アクセシブルな等価表示） -->
-        <section class="card table-card" id="tableCard" hidden aria-label="データテーブル">
-          <div class="card-head">
-            <h3>テーブル</h3>
-            <p class="chart-meta" id="tableNote"></p>
-          </div>
-          <div class="table-scroll" tabindex="0">
-            <table id="dataTable"></table>
-          </div>
-        </section>
-
-        <!-- 統計ビュー -->
-        <section class="card stats-card" id="statsCard" hidden aria-label="統計情報">
-          <div class="card-head">
-            <h3>統計</h3>
-            <p class="chart-meta" id="statsNote"></p>
-          </div>
-          <div id="statsContent"></div>
-        </section>
-
-        <!-- 生データマトリクス（複雑な形式の取り込み調整） -->
-        <section class="card matrix-card" id="matrixCard" hidden aria-label="生データマトリクス">
-          <div class="card-head with-cta">
-            <div>
-              <h3>生データマトリクス</h3>
-              <p class="chart-meta" id="matrixNote">セルをドラッグして範囲を選択し、下のボタンで役割を割り当てます</p>
+          <details class="accordion" id="presetAccordion">
+            <summary>プリセット<span class="accordion-count" id="presetCount" hidden>0</span></summary>
+            <div class="accordion-body">
+              <p class="panel-note">取り込み設定・フィルタ・グラフ設定など、ここまでの処理内容をまとめて保存し、次回や似た形式の別ファイルに使い回せます。</p>
+              <div class="preset-save-row">
+                <input type="text" id="presetNameInput" placeholder="プリセット名（例: 月次売上レポート）" maxlength="60" aria-label="プリセット名">
+                <button type="button" class="btn sm" id="savePresetBtn">保存</button>
+              </div>
+              <div class="preset-list" id="presetList"></div>
+              <button type="button" class="btn ghost sm" id="importPresetBtn">ファイルからプリセットを読み込む</button>
+              <input type="file" id="presetFileInput" accept=".json,application/json" hidden>
             </div>
-            <!-- グラフ設定は読み込み時に自動生成済み — 確認が済んだらワンクリックで完成グラフへ -->
-            <button type="button" class="btn" id="matrixToChartBtn">この内容でグラフを見る →</button>
-          </div>
-          <div class="matrix-legend">
-            <span><i class="legend-swatch legend-header" aria-hidden="true"></i>ヘッダー行</span>
-            <span><i class="legend-swatch legend-data" aria-hidden="true"></i>データ</span>
-            <span><i class="legend-swatch legend-preamble" aria-hidden="true"></i>前置き（自動除外）</span>
-            <span><i class="legend-swatch legend-excluded" aria-hidden="true"></i>除外（手動）</span>
-            <span><i class="legend-swatch legend-x" aria-hidden="true"></i>X軸</span>
-            <span><i class="legend-swatch legend-series" aria-hidden="true"></i>系列（Y軸）</span>
-          </div>
-          <div class="matrix-toolbar" id="matrixToolbar">
-            <span class="matrix-selection-label" id="matrixSelectionLabel">セルをドラッグ、または列見出しをクリックして範囲を選択してください</span>
-            <div class="matrix-toolbar-actions">
-              <button type="button" class="btn ghost sm" id="matrixSetHeaderBtn" disabled>ヘッダー行に設定</button>
-              <button type="button" class="btn ghost sm" id="matrixSetDataStartBtn" disabled>データ開始行に設定</button>
-              <button type="button" class="btn ghost sm" id="matrixExcludeBtn" disabled>この範囲を除外</button>
-              <button type="button" class="btn ghost sm" id="matrixIncludeBtn" disabled>除外を解除</button>
-              <span class="matrix-toolbar-sep" aria-hidden="true"></span>
-              <button type="button" class="btn ghost sm" id="matrixSetXBtn" disabled>X軸に設定</button>
-              <button type="button" class="btn ghost sm" id="matrixAddSeriesBtn" disabled>系列(Y軸)に追加</button>
-            </div>
-          </div>
-          <div class="matrix-scroll" tabindex="0">
-            <table id="matrixTable" class="import-preview-table matrix-table"></table>
-          </div>
-        </section>
-      </main>
-    </div>
+          </details>
 
-    <footer class="app-footer">
-      <p>Chart Lab — データはすべてブラウザ内で処理され、外部には送信されません</p>
-    </footer>
+          <details class="accordion">
+            <summary>クエリ（処理内容の写し）</summary>
+            <div class="accordion-body">
+              <div class="query-preview">
+                <div class="query-preview-head">
+                  <span>SQL風プレビュー</span>
+                  <button type="button" class="btn ghost sm" id="copyQueryBtn">コピー</button>
+                </div>
+                <pre><code id="queryCode"></code></pre>
+              </div>
+            </div>
+          </details>
+        </aside>
+      </div>
+    </main>
   </div>
 
   <div class="toast" id="toast" role="status" aria-live="polite" hidden>
@@ -514,7 +498,7 @@
     </div>
   </div>
 
-  <!-- 列選択リストボックス（X軸・系列・グループ化で共用するポータルパネル。1つだけ開く） -->
+  <!-- 列選択リストボックス（X軸・値で共用するポータルパネル。1つだけ開く） -->
   <div class="col-picker-panel" id="colPickerPortal" role="listbox" hidden></div>
 
   <!-- ライブラリ（同梱 — オフラインでも動作） -->

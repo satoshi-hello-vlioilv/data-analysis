@@ -1,22 +1,23 @@
 /**
  * アプリケーション層 — 状態管理と UI の結線
  *
- * 情報アーキテクチャ（認知負荷を抑えるための設計）:
- *   「1. データ → 2. データ処理 → 3. グラフ」の3ステップをタブ形式の
- *   ステッパーで切り替える（Hickの法則: 一度に見える操作を絞り込むほど
- *   意思決定が速くなる）。各ステップ内はさらにアコーディオンで主要/詳細を
- *   分け、チャンキング（Millerの法則）で認知負荷を下げる。
- *   検出した列はドラッグ＆ドロップでX軸・グループ化・系列に直接割り当て
- *   られる（再認優位・直接操作 — プルダウンを探すより速く、確実）。
- *   系列の並び順はドラッグハンドルまたは矢印ボタンで入れ替え可能。
- *   すべての操作は即時に右のグラフ・テーブル・統計・クエリプレビューへ
- *   反映され、操作と結果の対応が常に見える状態を保つ。
+ * 情報アーキテクチャ（v2.0 — 3回の案比較評価で決定。docs/design-reviews 参照）:
+ *   画面は「上部アプリバー → 操作カード → グラフ（＋必要なときだけ横に開く詳細パネル）」の
+ *   1カラム。サイドバーとステップ切替は廃止し、グラフの表示領域を最大化している。
+ *   - おすすめ: データの形（日付・カテゴリ・数値）から候補グラフを平易な名前と形の
+ *     サムネイルで並べる（再認は想起より速い — 何が見られるかが一目で分かる）。
+ *   - 文章型の主要設定: 「[値] を [X軸] ごとに [種類] で表示」をそのまま読める形で操作する。
+ *     X軸とグループ化は「X軸 ＋ 同じ値をまとめて集計」の1つの操作に統合した
+ *     （以前は別タブにあり、無効化されたX軸と二重に見えていた）。
+ *   - 詳細設定（フィルタ・軸・基準線・タイトル・データ・プリセット）は補助情報として
+ *     折りたたみ、グラフに重ねず横に開く（調整しながら結果を見られる）。
+ *   すべての操作は即時にグラフ・テーブル・統計・クエリプレビューへ反映される。
  */
 (() => {
   'use strict';
 
   // アプリのバージョン（単一の情報源）。変更内容は CHANGELOG.md に対応するエントリを追記する。
-  const APP_VERSION = '1.2.0';
+  const APP_VERSION = '2.0.0';
 
   const $ = id => document.getElementById(id);
 
@@ -26,11 +27,10 @@
 
   const state = {
     raw: null, // { rows, columns, meta }
-    activeStep: 'data', // 'data' | 'query' | 'chart' — サイドバーのステッパーで選択中のステップ
     query: { filters: [], groupBy: '', sort: 'auto', limit: null },
     chart: {
       mode: 'xy',            // 'xy' | 'hist'
-      x: '',                 // X軸の列（'' = 行番号）
+      x: '',                 // X軸の列（'' = 行番号）。まとめて集計中は query.groupBy と同じ列
       series: [],            // [{ id, column, agg, type, slot }]
       stacked: false,
       bins: { method: 'sturges', count: 10 },
@@ -54,6 +54,7 @@
     chartInstance: null,
     lastModel: null,
     lastTable: null,          // { columns: [names], rows: [[...]] } — グラフの等価テーブル
+    recommendations: [],      // おすすめグラフ [{ kind, title, sub, apply, matches }]
 
     // 取り込み設定（ヘッダー行・データ開始行の手動調整）— ファイル読込時のみ使用
     importRaw: null,          // { aoa, sourceName } | null（サンプルデータ利用時は null）
@@ -71,12 +72,17 @@
   // ---------------------------------------------------------------
 
   const el = {
+    app: $('app'),
     brandVersion: $('brandVersion'),
     themeToggle: $('themeToggle'),
+    viewTabs: $('viewTabs'),
+    privacyNote: $('privacyNote'),
+    exportActions: $('exportActions'),
     sampleGrid: $('sampleGrid'),
     emptySampleGrid: $('emptySampleGrid'),
     dropArea: $('dropArea'),
     fileInput: $('fileInput'),
+    reopenFileBtn: $('reopenFileBtn'),
     fileInfo: $('fileInfo'),
     fileInfoName: $('fileInfoName'),
     fileInfoDetail: $('fileInfoDetail'),
@@ -105,22 +111,22 @@
     matrixTable: $('matrixTable'),
     matrixToChartBtn: $('matrixToChartBtn'),
 
-    // ステッパー（ステップ切替タブ）
-    stepTabData: $('stepTabData'),
-    stepTabQuery: $('stepTabQuery'),
-    stepTabChart: $('stepTabChart'),
-    stepDataBadge: $('stepDataBadge'),
-    stepDataPanel: $('stepDataPanel'),
-    queryStepCount: $('queryStepCount'),
-    chartStepCount: $('chartStepCount'),
+    // 操作カード（おすすめ・文章型の主要設定）と作業領域
+    controlCard: $('controlCard'),
+    recsRow: $('recsRow'),
+    recsList: $('recsList'),
+    workspace: $('workspace'),
+    detailToggle: $('detailToggle'),
+    detailBadge: $('detailBadge'),
+    detailPanel: $('detailPanel'),
+    detailCloseBtn: $('detailCloseBtn'),
+    axisAccordion: $('axisAccordion'),
+    dataAccordion: $('dataAccordion'),
 
-    stepQuery: $('stepQuery'),
-    stepChart: $('stepChart'),
+    filterAccordion: $('filterAccordion'),
     filterCount: $('filterCount'),
     filterList: $('filterList'),
     addFilterBtn: $('addFilterBtn'),
-    groupByDropZone: $('groupByDropZone'),
-    groupBySelect: $('groupBySelect'),
     sortSelect: $('sortSelect'),
     limitInput: $('limitInput'),
     queryCode: $('queryCode'),
@@ -140,12 +146,11 @@
     metadataCount: $('metadataCount'),
     metadataChips: $('metadataChips'),
     chartTitleInput: $('chartTitleInput'),
-    xySettings: $('xySettings'),
-    histSettings: $('histSettings'),
     xAxisDropZone: $('xAxisDropZone'),
     xSelect: $('xSelect'),
-    xHint: $('xHint'),
-    chartTypeField: $('chartTypeField'),
+    aggregateToggle: $('aggregateToggle'),
+    xConnector: $('xConnector'),
+    typeWord: $('typeWord'),
     chartTypePicker: $('chartTypePicker'),
     seriesList: $('seriesList'),
     addSeriesBtn: $('addSeriesBtn'),
@@ -187,7 +192,6 @@
     histValueHint: $('histValueHint'),
     histFreqMin: $('histFreqMin'),
     histFreqMax: $('histFreqMax'),
-    contentToolbar: $('contentToolbar'),
     emptyState: $('emptyState'),
     chartCard: $('chartCard'),
     chartTitle: $('chartTitle'),
@@ -475,6 +479,7 @@
     try { localStorage.setItem('chartlab-theme', theme); } catch (e) { /* プライベートモード等 */ }
     renderSeriesList();
     renderHistSeriesList();
+    paintRecommendations();
     scheduleUpdate();
   }
 
@@ -509,8 +514,7 @@
           state.importRaw = null;
           state.importSuggested = null;
           state.importExcludedRows = new Set();
-          loadTable(sample.build());
-          switchStep('chart'); // 読み込み直後は完成したグラフをすぐ見せる
+          loadTable(sample.build()); // 読み込み直後は完成したグラフをすぐ見せる
           showToast('success', 'サンプル「' + sample.name + '」を読み込みました');
         });
         grid.appendChild(btn);
@@ -589,12 +593,12 @@
     // （サンプルデータや再調整時は、表示中のタブから強制的に切り替えない）
     loadTable(table, { view: opts.initial ? 'matrix' : null });
     if (opts.initial) {
-      switchStep('data'); // マトリクスと一緒に、データタブのファイル情報・取り込み設定を見せる
+      // マトリクスと一緒に、詳細設定の「データ・取り込み」（ヘッダー行などの調整欄）を開いて見せる
+      openDetail('data');
       const parts = [table.rows.length.toLocaleString('ja-JP') + '行 × ' + table.columns.length + '列を読み込みました'];
       parts.push(table.meta.hasHeader ? 'ヘッダー行を検出' : '列名を自動生成');
       showToast('success', parts.join('・'));
     } else {
-      // 取り込み設定の調整はデータタブで行うため、アクティブなステップは変えない
       showToast('info', '取り込み設定を変更しました（グラフ設定はリセットされます）');
     }
   }
@@ -631,18 +635,20 @@
     el.fileInfo.hidden = false;
     el.fileInfoName.textContent = table.meta.sourceName;
     el.fileInfoDetail.textContent = table.rows.length.toLocaleString('ja-JP') + '行 × ' + table.columns.length + '列';
+    el.fileInfo.title = table.meta.sourceName + '（' + el.fileInfoDetail.textContent + '）';
     renderColumnChips();
     renderMetadataChips();
     renderImportPanel();
-    el.stepTabQuery.disabled = false;
-    el.stepTabChart.disabled = false;
-    el.stepDataBadge.textContent = '✓';
-    el.stepDataBadge.classList.add('done');
-    el.contentToolbar.hidden = false;
     el.emptyState.hidden = true;
+    el.controlCard.hidden = false;
+    el.workspace.hidden = false;
+    el.viewTabs.hidden = false;
+    el.exportActions.hidden = false;
+    el.privacyNote.hidden = true;
+    buildRecommendations();
 
     populateXSelect();
-    populateGroupBySelect();
+    syncGroupByUI();
     el.sortSelect.value = state.query.sort;
     el.limitInput.value = '';
     el.stackedToggle.checked = false;
@@ -675,7 +681,6 @@
   function renderImportPanel() {
     if (!state.importRaw) {
       el.importAdjust.hidden = true;
-      el.importAdjust.open = false;
       el.matrixTab.hidden = true;
       if (state.view === 'matrix') switchView('chart');
       return;
@@ -693,7 +698,7 @@
       (isAuto ? '（自動検出）' : '（手動調整）');
     el.importHeaderRow.value = state.importHeaderRow >= 0 ? state.importHeaderRow + 1 : 0;
     el.importDataStartRow.value = state.importDataStart + 1;
-    if (!isAuto) el.importAdjust.open = true;
+    if (!isAuto) el.dataAccordion.open = true;
     renderMatrix();
   }
 
@@ -1015,14 +1020,8 @@
     });
     el.openMatrixBtn.addEventListener('click', () => switchView('matrix'));
 
-    // 生データ確認 → 完成グラフへの明示的な導線。
-    // グラフ設定は読み込み時に smartDefaults() で完成しているのに、進む手がかりが
-    // ステッパーの色変化しかなかった（サンプル読込は自動でグラフへ飛ぶのに、
-    // 本命である手元ファイルの経路だけ最後の一押しが欠けていた）
-    el.matrixToChartBtn.addEventListener('click', () => {
-      switchStep('chart');
-      switchView('chart');
-    });
+    // 生データ確認 → 完成グラフへの明示的な導線（グラフ設定は読み込み時に smartDefaults() で完成済み）
+    el.matrixToChartBtn.addEventListener('click', () => switchView('chart'));
   }
 
   /**
@@ -1053,6 +1052,125 @@
     }
   }
 
+  // ---------------------------------------------------------------
+  // おすすめグラフ — データの形（日付・カテゴリ・数値）から候補を作り、ワンクリックで切り替える
+  // 平易な名前（「売上高の推移」）と形のサムネイルで、何が見られるかを一目で分かるようにする。
+  // ---------------------------------------------------------------
+
+  const REC_THUMBS = {
+    line: '<svg width="40" height="26" viewBox="0 0 64 40" aria-hidden="true"><polyline points="2,32 14,22 24,26 36,12 48,16 62,6" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linejoin="round" stroke-linecap="round"/></svg>',
+    bar: '<svg width="40" height="26" viewBox="0 0 64 40" aria-hidden="true">' + [10, 24, 16, 30, 20].map((v, i) => '<rect x="' + (4 + i * 12) + '" y="' + (38 - v) + '" width="8" height="' + v + '" rx="1.5" fill="currentColor"/>').join('') + '</svg>',
+    hist: '<svg width="40" height="26" viewBox="0 0 64 40" aria-hidden="true">' + [6, 14, 26, 34, 24, 12, 5].map((v, i) => '<rect x="' + (2 + i * 8.6) + '" y="' + (38 - v) + '" width="8" height="' + v + '" fill="currentColor"/>').join('') + '</svg>',
+    scatter: '<svg width="40" height="26" viewBox="0 0 64 40" aria-hidden="true">' + [[8, 30], [16, 26], [22, 28], [30, 18], [38, 20], [44, 12], [52, 10], [58, 6]].map(([x, y]) => '<circle cx="' + x + '" cy="' + y + '" r="3.2" fill="currentColor"/>').join('') + '</svg>'
+  };
+
+  /** X値が重複していて、まとめないと意味を成さないか（smartDefaults と同じ判定） */
+  function needsGrouping(col) {
+    if (!col || !state.raw || state.raw.rows.length === 0) return false;
+    const unique = new Set(state.raw.rows.map(r => String(r[col]))).size;
+    return unique > 0 && state.raw.rows.length / unique >= 1.5 && unique <= 500;
+  }
+
+  function buildRecommendations() {
+    const cols = state.raw.columns;
+    const nums = cols.filter(c => c.type === 'number');
+    const dates = cols.filter(c => c.type === 'date');
+    const cats = cols.filter(c => c.type === 'string');
+    const recs = [];
+    if (nums.length) {
+      const n0 = nums[0].name;
+      if (dates.length) {
+        const d = dates[0].name;
+        recs.push({ kind: 'line', title: n0 + 'の推移', sub: d + 'ごと・折れ線', spec: { mode: 'xy', x: d, groupBy: needsGrouping(d) ? d : '', type: 'line', column: n0 } });
+      }
+      if (cats.length) {
+        const c = cats[0].name;
+        recs.push({ kind: 'bar', title: c + '別の' + n0, sub: '合計・棒グラフ', spec: { mode: 'xy', x: c, groupBy: c, type: 'bar', column: n0 } });
+      }
+      recs.push({ kind: 'hist', title: n0 + 'の分布', sub: 'ばらつき・ヒストグラム', spec: { mode: 'hist', column: n0 } });
+      if (nums.length >= 2) {
+        const n1 = nums[1].name;
+        recs.push({ kind: 'scatter', title: n1 + 'と' + n0 + 'の関係', sub: '相関・散布図', spec: { mode: 'xy', x: n1, groupBy: '', type: 'scatter', column: n0 } });
+      }
+    }
+    state.recommendations = recs.slice(0, 4);
+
+    // ボタンは読込時に一度だけ作り、以後は選択中の表示だけを更新する（更新のたびに作り直すとフォーカスが外れるため）
+    el.recsList.textContent = '';
+    state.recommendations.forEach(r => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'rec-card';
+      btn.innerHTML = REC_THUMBS[r.kind];
+      const text = document.createElement('span');
+      text.className = 'rec-text';
+      const title = document.createElement('strong');
+      title.textContent = r.title;
+      const sub = document.createElement('small');
+      sub.textContent = r.sub;
+      text.append(title, sub);
+      btn.appendChild(text);
+      btn.title = r.title + '（' + r.sub + '）';
+      btn.addEventListener('click', () => applyRecommendation(r.spec));
+      r.btn = btn;
+      el.recsList.appendChild(btn);
+    });
+    el.recsRow.hidden = state.recommendations.length === 0;
+    paintRecommendations();
+    renderRecommendations();
+  }
+
+  /** サムネイルをテーマのカテゴリカル色で塗る（候補ごとに色を変えて見分けやすく） */
+  function paintRecommendations() {
+    state.recommendations.forEach((r, i) => {
+      if (r.btn) r.btn.querySelector('svg').style.color = Palette.seriesColor(state.theme, i);
+    });
+  }
+
+  function recIsActive(spec) {
+    const c = state.chart;
+    if (c.mode !== spec.mode || c.series.length !== 1 || c.series[0].column !== spec.column) return false;
+    if (spec.mode === 'hist') return true;
+    const groupBy = state.query.groupBy || '';
+    return c.series[0].type === spec.type && groupBy === spec.groupBy && (groupBy || c.x) === spec.x &&
+      (!spec.groupBy || (c.series[0].agg || 'sum') === 'sum');
+  }
+
+  function renderRecommendations() {
+    state.recommendations.forEach(r => {
+      if (!r.btn) return;
+      const active = recIsActive(r.spec);
+      r.btn.classList.toggle('active', active);
+      r.btn.setAttribute('aria-pressed', String(active));
+    });
+  }
+
+  /** おすすめを適用: 値を1つにそろえ、X軸・まとめ方・種類（または分布）を設定する */
+  function applyRecommendation(spec) {
+    const keep = state.chart.series[0];
+    state.chart.mode = spec.mode;
+    state.chart.series = [{
+      id: uid(),
+      column: spec.column,
+      agg: 'sum', // おすすめの説明（「合計・棒グラフ」など）どおりにそろえる
+      type: spec.type || (keep && keep.type) || 'bar',
+      slot: keep ? keep.slot : 0
+    }];
+    if (spec.mode === 'xy') {
+      state.chart.x = spec.x;
+      state.query.groupBy = spec.groupBy;
+      state.chart.stacked = false;
+    }
+    // 前のグラフ用の表示範囲は新しいグラフに合わないことが多いので自動に戻す
+    state.chart.xy.xRange = { min: null, max: null };
+    state.chart.xy.yRange = { min: null, max: null };
+    state.chart.xy.xIndexRange = { start: null, end: null };
+    state.chart.hist.valueRange = { min: null, max: null };
+    state.chart.hist.freqRange = { min: null, max: null };
+    syncAllUIFromState();
+    switchView('chart');
+  }
+
   function clearData() {
     state.raw = null;
     state.chart.series = [];
@@ -1069,15 +1187,15 @@
     el.fileInfo.hidden = true;
     el.columnSummary.hidden = true;
     el.importAdjust.hidden = true;
-    el.importAdjust.open = false;
     el.matrixTab.hidden = true;
     el.metadataHint.hidden = true;
-    el.stepTabQuery.disabled = true;
-    el.stepTabChart.disabled = true;
-    el.stepDataBadge.textContent = '1';
-    el.stepDataBadge.classList.remove('done');
-    switchStep('data');
-    el.contentToolbar.hidden = true;
+    closeDetail();
+    el.controlCard.hidden = true;
+    el.workspace.hidden = true;
+    el.viewTabs.hidden = true;
+    el.exportActions.hidden = true;
+    el.privacyNote.hidden = false;
+    state.recommendations = [];
     el.chartCard.hidden = true;
     el.tableCard.hidden = true;
     el.statsCard.hidden = true;
@@ -1089,19 +1207,32 @@
   }
 
   // ---------------------------------------------------------------
-  // ステッパー（ステップ切替タブ）
+  // 詳細設定パネル（補助情報）— グラフに重ねず横に開く。section で開く項目を指定できる
   // ---------------------------------------------------------------
 
-  function switchStep(step) {
-    state.activeStep = step;
-    [el.stepTabData, el.stepTabQuery, el.stepTabChart].forEach(btn => {
-      const active = btn.dataset.step === step;
-      btn.classList.toggle('active', active);
-      btn.setAttribute('aria-selected', String(active));
-    });
-    el.stepDataPanel.hidden = step !== 'data';
-    el.stepQuery.hidden = step !== 'query';
-    el.stepChart.hidden = step !== 'chart';
+  const DETAIL_SECTIONS = { filter: 'filterAccordion', axis: 'axisAccordion', refline: 'refLineAccordion', data: 'dataAccordion', preset: 'presetAccordion' };
+
+  function openDetail(section) {
+    el.detailPanel.hidden = false;
+    el.detailToggle.setAttribute('aria-expanded', 'true');
+    el.detailToggle.classList.add('on');
+    el.app.classList.add('detail-open');
+    if (section && DETAIL_SECTIONS[section]) {
+      const acc = el[DETAIL_SECTIONS[section]];
+      acc.open = true;
+      requestAnimationFrame(() => acc.scrollIntoView({ block: 'nearest' }));
+    }
+  }
+
+  function closeDetail() {
+    el.detailPanel.hidden = true;
+    el.detailToggle.setAttribute('aria-expanded', 'false');
+    el.detailToggle.classList.remove('on');
+    el.app.classList.remove('detail-open');
+  }
+
+  function toggleDetail() {
+    if (el.detailPanel.hidden) openDetail(); else closeDetail();
   }
 
   function renderColumnChips() {
@@ -1111,7 +1242,7 @@
       const chip = document.createElement('span');
       chip.className = 'column-chip type-' + c.type;
       chip.draggable = true;
-      chip.title = 'ドラッグしてX軸・グループ化・系列に設定';
+      chip.title = 'ドラッグして「値」や「X軸」に入れられます';
       const mark = document.createElement('em');
       mark.textContent = TYPE_LABELS[c.type];
       const name = document.createElement('span');
@@ -1194,33 +1325,8 @@
   }
 
   // ---------------------------------------------------------------
-  // ステップ2: クエリ UI
+  // フィルタ・並び替え UI
   // ---------------------------------------------------------------
-
-  let groupByPicker = null;
-
-  function populateGroupBySelect() {
-    // グループ化はカテゴリ・日付を先に（数値でのグループ化も可能）
-    const ordered = [...state.raw.columns].sort((a, b) => {
-      const rank = t => (t === 'string' ? 0 : t === 'date' ? 1 : 2);
-      return rank(a.type) - rank(b.type);
-    });
-    const options = [{ value: '', label: 'なし（行をそのまま使う）', type: null }]
-      .concat(ordered.map(c => ({ value: c.name, label: c.name, type: c.type })));
-    el.groupBySelect.textContent = '';
-    groupByPicker = createColumnPicker({
-      options,
-      value: state.query.groupBy,
-      ariaLabel: 'グループ化して集計',
-      onChange: val => {
-        state.query.groupBy = val;
-        syncGroupByUI();
-        scheduleUpdate();
-      }
-    });
-    el.groupBySelect.appendChild(groupByPicker);
-    syncGroupByUI();
-  }
 
   function populateSortSelect() {
     el.sortSelect.textContent = '';
@@ -1228,12 +1334,40 @@
     el.sortSelect.value = state.query.sort;
   }
 
+  /**
+   * X軸と「同じ値をまとめて集計」（= グループ化）の表示を state に合わせる。
+   * 状態は従来どおり query.groupBy / chart.x の2つで持つが（プリセット・SQL互換）、
+   * 画面では「X軸 [列] ＋ まとめて集計」の1つの操作として見せる。
+   */
   function syncGroupByUI() {
     const grouped = !!state.query.groupBy;
-    if (xPicker) xPicker.setDisabled(grouped);
-    el.xHint.hidden = !grouped;
-    // 集計セレクトの表示切替は系列リスト再描画で行う
+    const xCol = state.query.groupBy || state.chart.x;
+    if (xPicker) xPicker.setValue(xCol);
+    const canGroup = !!xCol;
+    el.aggregateToggle.disabled = !canGroup;
+    el.aggregateToggle.setAttribute('aria-pressed', String(grouped));
+    el.aggregateToggle.classList.toggle('on', grouped);
+    el.aggregateToggle.textContent = grouped ? '✓ まとめて集計' : 'まとめて集計';
+    el.aggregateToggle.title = !canGroup
+      ? '行番号はまとめられません。X軸に列を選ぶと使えます'
+      : grouped ? '同じ「' + xCol + '」の行を合計・平均などで1つにまとめています（クリックで解除）'
+        : '同じ「' + xCol + '」の行を合計・平均などで1つにまとめる';
+    el.xConnector.textContent = grouped ? 'ごとに' : 'に沿って';
+    // 集計方法セレクトの表示切替は系列リスト再描画で行う
     renderSeriesList();
+  }
+
+  /** 「まとめて集計」の切替 */
+  function toggleAggregate() {
+    if (state.query.groupBy) {
+      state.chart.x = state.query.groupBy;
+      state.query.groupBy = '';
+    } else {
+      if (!state.chart.x) return;
+      state.query.groupBy = state.chart.x;
+    }
+    syncGroupByUI();
+    scheduleUpdate();
   }
 
   /** 文字列列のフィルタ入力用に候補データリストを用意 */
@@ -1324,19 +1458,17 @@
     el.filterCount.textContent = active;
   }
 
-  /** ステッパー上の「処理」「グラフ」タブに件数バッジを表示（タブを開かなくても状況が分かる） */
-  function updateStepperBadges() {
+  /** 「詳細設定」ボタンに、畳まれていて見えない有効なフィルタ数を出す（開かなくても状況が分かる） */
+  function updateDetailBadge() {
     if (!state.raw) return;
     const active = state.query.filters.filter(f => f.column && f.op && f.value !== '' && f.value !== null).length;
-    el.queryStepCount.hidden = active === 0;
-    el.queryStepCount.textContent = active;
-    const seriesCount = state.chart.series.length;
-    el.chartStepCount.hidden = seriesCount === 0;
-    el.chartStepCount.textContent = seriesCount;
+    el.detailBadge.hidden = active === 0;
+    el.detailBadge.textContent = active;
+    el.detailBadge.title = active ? 'フィルタ ' + active + '件が有効' : '';
   }
 
   // ---------------------------------------------------------------
-  // ステップ3: グラフ UI
+  // 文章型の主要設定（値・X軸・種類）
   // ---------------------------------------------------------------
 
   let xPicker = null;
@@ -1347,23 +1479,21 @@
     el.xSelect.textContent = '';
     xPicker = createColumnPicker({
       options,
-      value: state.chart.x,
+      value: state.query.groupBy || state.chart.x,
       ariaLabel: 'X軸の列',
-      onChange: val => { state.chart.x = val; scheduleUpdate(); }
+      onChange: val => setXAxisColumn(val, true)
     });
     el.xSelect.appendChild(xPicker);
-    xPicker.setDisabled(!!state.query.groupBy);
   }
 
   function setMode(mode, silent) {
     state.chart.mode = mode;
+    el.app.dataset.mode = mode;
     el.modeSegment.querySelectorAll('button').forEach(btn => {
       const active = btn.dataset.mode === mode;
       btn.classList.toggle('active', active);
       btn.setAttribute('aria-pressed', String(active));
     });
-    el.xySettings.hidden = mode !== 'xy';
-    el.histSettings.hidden = mode !== 'hist';
     if (mode === 'hist' && state.chart.series.length === 0) {
       const nums = numericColumns();
       if (nums.length) state.chart.series.push({ id: uid(), column: nums[0].name, agg: 'sum', type: 'bar', slot: nextFreeSlot() });
@@ -1415,35 +1545,51 @@
     return handle;
   }
 
-  /** キーボードでも並び替えられる ↑/↓ ボタン（ドラッグのアクセシブルな代替） */
+  /** キーボードでも並び替えられる ◀/▶ ボタン（ドラッグのアクセシブルな代替。値は横に並ぶため左右） */
   function createReorderButtons(idx, total) {
     const wrap = document.createElement('span');
     wrap.className = 'reorder-btns';
-    const up = document.createElement('button');
-    up.type = 'button';
-    up.textContent = '▲';
-    up.setAttribute('aria-label', '1つ上へ移動');
-    up.disabled = idx === 0;
-    up.addEventListener('click', () => reorderSeries(idx, idx - 1));
-    const down = document.createElement('button');
-    down.type = 'button';
-    down.textContent = '▼';
-    down.setAttribute('aria-label', '1つ下へ移動');
-    down.disabled = idx === total - 1;
-    down.addEventListener('click', () => reorderSeries(idx, idx + 1));
-    wrap.append(up, down);
+    const prev = document.createElement('button');
+    prev.type = 'button';
+    prev.textContent = '◀';
+    prev.setAttribute('aria-label', '1つ前へ移動');
+    prev.disabled = idx === 0;
+    prev.addEventListener('click', () => reorderSeries(idx, idx - 1));
+    const next = document.createElement('button');
+    next.type = 'button';
+    next.textContent = '▶';
+    next.setAttribute('aria-label', '1つ後ろへ移動');
+    next.disabled = idx === total - 1;
+    next.addEventListener('click', () => reorderSeries(idx, idx + 1));
+    wrap.append(prev, next);
     return wrap;
   }
 
+  function createRemoveButton(label, idx) {
+    const removeBtn = document.createElement('button');
+    removeBtn.type = 'button';
+    removeBtn.className = 'icon-btn xs';
+    removeBtn.setAttribute('aria-label', label);
+    removeBtn.title = label;
+    removeBtn.textContent = '×';
+    removeBtn.addEventListener('click', () => {
+      state.chart.series.splice(idx, 1);
+      renderSeriesList();
+      renderHistSeriesList();
+      scheduleUpdate();
+    });
+    return removeBtn;
+  }
+
   /**
-   * グラフの種類ピッカー（単一系列時のみ表示）
-   * 「どんな形で見るか」は最重要の意思決定なので、形のアイコンで選べる
-   * 視覚セレクタを設定の最上部に出す。複数系列では種類を系列ごとに
-   * 混在できるため、各系列行の select に役割を引き継ぐ。
+   * グラフの種類ピッカー（単一系列時のみ。文中の「[種類] で表示」の部分）
+   * 「どんな形で見るか」は最重要の意思決定なので、形のアイコン＋名前で選べる。
+   * 複数系列では種類を系列ごとに混在できるため、各値チップの select に役割を引き継ぐ。
    */
   function renderChartTypePicker() {
     const single = state.chart.series.length === 1;
-    el.chartTypeField.hidden = !single;
+    el.chartTypePicker.hidden = !single;
+    el.typeWord.textContent = single ? 'で表示' : '表示';
     el.chartTypePicker.textContent = '';
     if (!single) return;
     const current = state.chart.series[0].type;
@@ -1466,141 +1612,102 @@
     });
   }
 
-  /** XYモードの系列行 */
+  /**
+   * XYモードの値チップ（文中の「[値] を」の部分）
+   * 1つのチップ = [色] [列] (集計) (種類) (並び替え・削除)。集計はまとめて集計中だけ、
+   * 種類・並び替え・削除は値が2つ以上のときだけ出し、単純な場合の見た目を軽く保つ。
+   */
   function renderSeriesList() {
     if (!state.raw) return;
     el.seriesList.textContent = '';
     const nums = numericColumns();
     const grouped = !!state.query.groupBy;
     const total = state.chart.series.length;
-    const single = total === 1;
+    const multi = total > 1;
 
     state.chart.series.forEach((series, idx) => {
       const row = document.createElement('div');
       row.className = 'series-row';
 
-      const handle = createDragHandle(row, idx, series.column);
+      if (multi) row.appendChild(createDragHandle(row, idx, series.column));
 
       const swatch = document.createElement('span');
       swatch.className = 'swatch';
       swatch.style.background = Palette.seriesColor(state.theme, series.slot);
       swatch.title = '系列カラー（' + Palette.SERIES_NAMES[series.slot] + '）';
+      row.appendChild(swatch);
 
       const colPicker = createColumnPicker({
         options: nums.map(c => ({ value: c.name, label: c.name, type: c.type })),
         value: series.column,
-        ariaLabel: '系列の列',
+        ariaLabel: '表示する値の列',
         onChange: val => { series.column = val; scheduleUpdate(); }
       });
-      colPicker.classList.add('grow');
+      row.appendChild(colPicker);
 
-      const aggSel = document.createElement('select');
-      aggSel.setAttribute('aria-label', '集計方法');
-      QueryEngine.AGGS.forEach(a => aggSel.appendChild(makeOption(a.id, a.label)));
-      aggSel.value = series.agg || 'sum';
-      aggSel.hidden = !grouped;
+      if (grouped) {
+        const aggSel = document.createElement('select');
+        aggSel.className = 'inline-select';
+        aggSel.setAttribute('aria-label', '集計方法');
+        aggSel.title = 'まとめるときの計算方法';
+        QueryEngine.AGGS.forEach(a => aggSel.appendChild(makeOption(a.id, a.label)));
+        aggSel.value = series.agg || 'sum';
+        aggSel.addEventListener('change', () => { series.agg = aggSel.value; scheduleUpdate(); });
+        row.appendChild(aggSel);
+      }
 
-      const typeSel = document.createElement('select');
-      typeSel.setAttribute('aria-label', 'グラフの種類');
-      CHART_TYPES.forEach(t => typeSel.appendChild(makeOption(t.id, t.label)));
-      typeSel.value = series.type;
-
-      const reorderBtns = createReorderButtons(idx, total);
-
-      const removeBtn = document.createElement('button');
-      removeBtn.type = 'button';
-      removeBtn.className = 'icon-btn sm';
-      removeBtn.setAttribute('aria-label', 'この系列を削除');
-      removeBtn.textContent = '×';
-      removeBtn.disabled = state.chart.series.length <= 1;
-
-      aggSel.addEventListener('change', () => { series.agg = aggSel.value; scheduleUpdate(); });
-      typeSel.addEventListener('change', () => { series.type = typeSel.value; scheduleUpdate(); });
-      removeBtn.addEventListener('click', () => {
-        state.chart.series.splice(idx, 1);
-        renderSeriesList();
-        renderHistSeriesList();
-        scheduleUpdate();
-      });
-
-      // 列名は独立した行に大きく確保し、集計・種類・並び替えは下段のコンパクトな行にまとめる
-      // （1行に詰め込むと列ピッカーが幅0近くまで潰れ、列名が読めなくなるため）
-      const mainLine = document.createElement('div');
-      mainLine.className = 'series-row-main';
-      mainLine.append(handle, swatch, colPicker, removeBtn);
-
-      // 単一系列では種類は上部のアイコンピッカーが担い、並び替えも不要
-      // → 下段はグループ化中の集計選択があるときだけ出す
-      typeSel.hidden = single;
-      reorderBtns.hidden = single;
-
-      const subLine = document.createElement('div');
-      subLine.className = 'series-row-sub';
-      subLine.append(aggSel, typeSel, reorderBtns);
-
-      row.append(mainLine);
-      if (grouped || !single) row.append(subLine);
+      if (multi) {
+        const typeSel = document.createElement('select');
+        typeSel.className = 'inline-select';
+        typeSel.setAttribute('aria-label', 'グラフの種類');
+        CHART_TYPES.forEach(t => typeSel.appendChild(makeOption(t.id, t.label)));
+        typeSel.value = series.type;
+        typeSel.addEventListener('change', () => { series.type = typeSel.value; scheduleUpdate(); });
+        row.append(typeSel, createReorderButtons(idx, total), createRemoveButton('この値を外す', idx));
+      }
       el.seriesList.appendChild(row);
     });
 
     el.addSeriesBtn.disabled = state.chart.series.length >= Palette.MAX_SERIES || nums.length === 0;
     el.addSeriesBtn.title = state.chart.series.length >= Palette.MAX_SERIES
-      ? '系列は最大8つまでです（それ以上は「その他」への集約や複数グラフをご検討ください）'
-      : '';
+      ? '値は最大8つまでです（それ以上は「その他」への集約や複数グラフをご検討ください）'
+      : '別の列を同じグラフに重ねて比べる';
     renderChartTypePicker();
-    updateStepperBadges();
+    updateDetailBadge();
   }
 
-  /** ヒストグラムモードの対象列行（同じ series 配列を共有） */
+  /** ヒストグラムモードの列チップ（同じ series 配列を共有） */
   function renderHistSeriesList() {
     if (!state.raw) return;
     el.histSeriesList.textContent = '';
     const nums = numericColumns();
     const total = state.chart.series.length;
+    const multi = total > 1;
 
     state.chart.series.forEach((series, idx) => {
       const row = document.createElement('div');
       row.className = 'series-row';
-
-      const handle = createDragHandle(row, idx, series.column);
+      if (multi) row.appendChild(createDragHandle(row, idx, series.column));
 
       const swatch = document.createElement('span');
       swatch.className = 'swatch';
       swatch.style.background = Palette.seriesColor(state.theme, series.slot);
+      row.appendChild(swatch);
 
       const colPicker = createColumnPicker({
         options: nums.map(c => ({ value: c.name, label: c.name, type: c.type })),
         value: series.column,
-        ariaLabel: '対象の列',
+        ariaLabel: '分布を見る列',
         onChange: val => { series.column = val; scheduleUpdate(); }
       });
-      colPicker.classList.add('grow');
-
-      const reorderBtns = createReorderButtons(idx, total);
-
-      const removeBtn = document.createElement('button');
-      removeBtn.type = 'button';
-      removeBtn.className = 'icon-btn sm';
-      removeBtn.setAttribute('aria-label', 'この列を削除');
-      removeBtn.textContent = '×';
-      removeBtn.disabled = state.chart.series.length <= 1;
-
-      removeBtn.addEventListener('click', () => {
-        state.chart.series.splice(idx, 1);
-        renderSeriesList();
-        renderHistSeriesList();
-        scheduleUpdate();
-      });
-
-      const mainLine = document.createElement('div');
-      mainLine.className = 'series-row-main';
-      mainLine.append(handle, swatch, colPicker, reorderBtns, removeBtn);
-      row.appendChild(mainLine);
+      row.appendChild(colPicker);
+      if (multi) row.append(createReorderButtons(idx, total), createRemoveButton('この列を外す', idx));
       el.histSeriesList.appendChild(row);
     });
 
     el.addHistSeriesBtn.disabled = state.chart.series.length >= Palette.MAX_SERIES || nums.length === 0;
-    updateStepperBadges();
+    el.addHistSeriesBtn.title = '別の列の分布を重ねて比べる';
+    updateDetailBadge();
   }
 
   /** 系列を1つ追加する。forcedColumn を指定すると（列チップのドロップ時など）その列を使う */
@@ -1632,11 +1739,17 @@
   }
 
   /** X軸に列を割り当てる（列チップのドロップ・生データマトリクスからの割り当てで共用） */
-  function setXAxisColumn(column) {
+  /**
+   * X軸の列を設定する（X軸ピッカー・列チップのドロップ・生データマトリクスで共用）。
+   * まとめて集計中はグループ列も同じ列に切り替える（X軸＝まとめる単位）。行番号（''）を
+   * 選んだ場合は、行番号ではまとめられないので集計を解除する。
+   */
+  function setXAxisColumn(column, silent) {
+    if (state.query.groupBy) state.query.groupBy = column || '';
     state.chart.x = column;
-    if (xPicker) xPicker.setValue(column);
+    syncGroupByUI();
     scheduleUpdate();
-    showToast('success', 'X軸を「' + column + '」に設定しました');
+    if (!silent) showToast('success', 'X軸を「' + (column || '行番号') + '」に設定しました');
   }
 
   // ---------------------------------------------------------------
@@ -1739,7 +1852,8 @@
 
     // ステッパーのバッジ（フィルタ件数・系列数など、タブを開かなくても状況が分かるように）
     updateFilterCount();
-    updateStepperBadges();
+    updateDetailBadge();
+    renderRecommendations();
 
     // 軸ラベル・表示範囲コントロールの同期（データ範囲ヒント・スライダー等）
     syncAxisRangeUI(model);
@@ -1954,8 +2068,9 @@
     }
 
     syncRangeInputs();
-    const accordion = document.querySelector(model.mode === 'hist' ? '#histSettings .axis-adjust' : '#xySettings .axis-adjust');
-    if (accordion) accordion.open = true;
+    // 詳細設定を開いているときだけ、数値の確認・微調整ができるよう「軸・表示範囲」を開く
+    // （閉じているときに自動で開くと、ドラッグ直後にグラフが縮んで位置がずれるため開かない）
+    if (!el.detailPanel.hidden) el.axisAccordion.open = true;
     scheduleUpdate();
     updateChartZoomResetVisibility();
   }
@@ -2468,7 +2583,7 @@
       state.refLines = (preset.refLines || []).map(l => ({ id: uid(), label: l.label || '', value: l.value }));
 
       syncAllUIFromState();
-      switchStep('chart');
+      switchView('chart');
       showToast('success', 'プリセット「' + preset.name + '」を適用しました');
     };
 
@@ -2494,7 +2609,7 @@
 
   function syncAllUIFromState() {
     populateXSelect();
-    populateGroupBySelect(); // 内部で syncGroupByUI() → renderSeriesList() も走る
+    syncGroupByUI(); // 内部で renderSeriesList() も走る
     el.sortSelect.value = state.query.sort;
     el.limitInput.value = state.query.limit || '';
     el.stackedToggle.checked = state.chart.stacked;
@@ -2525,31 +2640,24 @@
       applyTheme(state.theme === 'dark' ? 'light' : 'dark');
     });
 
-    // ステッパー（ステップ切替タブ）
-    [el.stepTabData, el.stepTabQuery, el.stepTabChart].forEach(btn => {
-      btn.addEventListener('click', () => switchStep(btn.dataset.step));
-    });
+    // 詳細設定パネル（グラフを隠さず横に開く）
+    el.detailToggle.addEventListener('click', toggleDetail);
+    el.detailCloseBtn.addEventListener('click', closeDetail);
 
-    // 列チップのドラッグ＆ドロップ — X軸・グループ化・系列へ直接割り当て
+    // X軸の「まとめて集計」（= グループ化）の切替
+    el.aggregateToggle.addEventListener('click', toggleAggregate);
+
+    // 列チップのドラッグ＆ドロップ — X軸・値へ直接割り当て（まとめて集計中はまとめる単位も切り替わる）
     bindColumnDropZone(el.xAxisDropZone, {
       numericOnly: false,
       onDrop: column => setXAxisColumn(column)
-    });
-    bindColumnDropZone(el.groupByDropZone, {
-      numericOnly: false,
-      onDrop: column => {
-        state.query.groupBy = column;
-        if (groupByPicker) groupByPicker.setValue(column);
-        syncGroupByUI();
-        scheduleUpdate();
-        showToast('success', '「' + column + '」でグループ化しました');
-      }
     });
     bindColumnDropZone(el.seriesList, { numericOnly: true, onDrop: column => addSeries(column) });
     bindColumnDropZone(el.histSeriesList, { numericOnly: true, onDrop: column => addSeries(column) });
 
     // ファイル読み込み（ドラッグ＆ドロップは画面全体で受け付ける — initWindowFileDrop 参照）
     el.dropArea.addEventListener('click', () => el.fileInput.click());
+    el.reopenFileBtn.addEventListener('click', () => el.fileInput.click());
     el.dropArea.addEventListener('keydown', e => {
       if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); el.fileInput.click(); }
     });
@@ -2709,7 +2817,6 @@
     loadPresetsFromStorage();
     renderPresetList();
     bindEvents();
-    switchStep('data');
   }
 
   if (document.readyState === 'loading') {
